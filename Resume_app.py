@@ -11,9 +11,10 @@ from langchain_core.documents import Document
 from langchain_classic.chains import RetrievalQA
 
 # --- 1. Page Config ---
-st.set_page_config(page_title="Freddy Goh AI Skills queries tools", layout="wide")
-st.title("🤖 Try using technical keywords Queries - some functions may not works")
-st.markdown("Response with Freddy Goh's resume using Oracle vector database AI & Gemini 3 Flash. se with care")
+st.set_page_config(page_title="Freddy Goh's AI Skills queries tools", layout="wide")
+st.title("🤖 Freddy Goh's AI Skills queries tools")
+st.markdown("Try using technical keywords Queries - some functions may not works")
+st.markdown("Response with Freddy Goh's resume using Oracle vector database AI & Gemini 3 Flash. Disclaimer: use with care")
 
 
 # --- 2. Resource Caching (Prevents reconnecting on every click) ---
@@ -68,7 +69,7 @@ with col1:
     generate_btn = st.button("Architect My Resume", type="primary")
 
 with col2:
-    st.subheader("Tailored Results")
+    st.subheader("Results extracted from Freddy's Goh")
     if generate_btn and jd_text:
         with st.spinner("Analyzing your history..."):
             # Setup RAG Chain
