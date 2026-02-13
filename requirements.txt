@@ -1,4 +1,5 @@
 streamlit
+langchain-google-genai
 langgraph
+langchain-core
 google-generativeai
-pinecone-client
