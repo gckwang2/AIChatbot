@@ -26,21 +26,21 @@ def init_connections():
     )
 
     # --- 1. Fix the Embeddings Model ---
-# 'text-embedding-004' is the stable standard for 2026.
-# If that fails, 'gemini-embedding-001' is the new high-performance alternative.
-embeddings = GoogleGenerativeAIEmbeddings(
+    # 'text-embedding-004' is the stable standard for 2026.
+    # If that fails, 'gemini-embedding-001' is the new high-performance alternative.
+    embeddings = GoogleGenerativeAIEmbeddings(
     model="text-embedding-001", 
     google_api_key=st.secrets["GOOGLE_API_KEY"]
-)
+    )
 
     # Init Embeddings
     # --- 2. Fix the Chat/Generation Model ---
-# This is where your 'gemini-3-flash-preview' belongs.
-llm = ChatGoogleGenerativeAI(
+    # This is where your 'gemini-3-flash-preview' belongs.
+    llm = ChatGoogleGenerativeAI(
     model="gemini-3-flash-preview",
     google_api_key=st.secrets["GOOGLE_API_KEY"],
     temperature=0.2
-)
+    )
     # Init Vector Store
     v_store = OracleVS(
         client=conn,
