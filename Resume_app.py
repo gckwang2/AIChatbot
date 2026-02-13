@@ -8,7 +8,6 @@ from langchain_classic.chains import RetrievalQA
 # --- 1. Page Config ---
 st.set_page_config(page_title="Freddy Goh's AI Skills", layout="centered")
 
-# Gemini-style CSS for clean aesthetics
 st.markdown("""
     <style>
     .stApp { max-width: 800px; margin: 0 auto; }
@@ -49,10 +48,9 @@ def init_connections():
 vector_store, llm = init_connections()
 
 # --- 3. Chat Session State ---
-# This mimics the chat memory of Gemini
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        {"role": "assistant", "content": "Hello! I'm Freddy's AI assistant. Paste a job description or ask me about Freddy's technical skills."}
+        {"role": "assistant", "content": "Hello! I'm Freddy's AI assistant. Ask me about Freddy's technical skills or paste a job description."}
     ]
 
 # Display chat history
@@ -60,27 +58,24 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# --- 4. Chat Input (The Gemini bar at the bottom) ---
-if prompt := st.chat_input("Ask about Freddy's skills..."):
-    # Add user message to history
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
+# --- 4. Define the Prompt (Missing in your snippet) ---
+template = """
+SYSTEM: Expert Career Coach. Context is from Freddy's resume.
+CONTEXT: {context}
+QUESTION: {question}
+INSTRUCTIONS: Map skills, write a summary, and extract achievements with metrics.
+"""
+PROMPT = PromptTemplate(template=template, input_variables=["context", "question"])
 
-    # Generate AI Response
+# --- 5. Chat Input (Fixed: Removed duplicate, kept unique key) ---
 if prompt := st.chat_input("Ask about Freddy's skills...", key="freddy_chat_input"):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        # Create a placeholder for the "typing" effect
-        response_placeholder = st.empty()
-        full_response = ""
-        
-        # We use a simple spinner while the search happens
         with st.spinner("Searching Freddy's history..."):
-            # Update k=5 and similarity for speed
+            # Speed optimizations applied
             chain = RetrievalQA.from_chain_type(
                 llm=llm,
                 chain_type="stuff",
@@ -88,13 +83,10 @@ if prompt := st.chat_input("Ask about Freddy's skills...", key="freddy_chat_inpu
                 chain_type_kwargs={"prompt": PROMPT}
             )
             
-            # Streaming the result
-            # Note: For legacy RetrievalQA, it returns the whole block, 
-            # but using st.write_stream makes it feel smoother.
             result = chain.invoke(prompt)
             full_response = result["result"]
             
-        # This gives that Gemini "fade-in" or typing effect
+        # Typing effect
         st.write_stream(iter(full_response.split(" "))) 
             
     st.session_state.messages.append({"role": "assistant", "content": full_response})
