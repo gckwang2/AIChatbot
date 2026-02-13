@@ -5,7 +5,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 # 1. Page Configuration
 st.set_page_config(page_title="My Personal AI", page_icon="🛡️")
-st.title("🛡️ Personal Agent with Guardrails")
+st.title("🛡️ Freddy Goh is here to help with Guardrails")
 
 # 2. Secure API Keys (Setup these in Streamlit Cloud Secrets!)
 if "GOOGLE_API_KEY" not in st.secrets:
@@ -14,7 +14,7 @@ if "GOOGLE_API_KEY" not in st.secrets:
 
 # 3. Initialize the LLM (Gemini 2.0 Flash is fast and free-tier friendly)
 model = ChatGoogleGenerativeAI(
-    model="gemini-2.0-flash-lite", 
+    model="gemini-2.5-flash-lite", 
     google_api_key=st.secrets["GOOGLE_API_KEY"],
     max_retries=3,  # Automatically retry if it hits a limit
     timeout=60      # Give it more time to respond
