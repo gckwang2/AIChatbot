@@ -49,7 +49,7 @@ def init_connections():
         table_name="RESUME_SEARCH_V2",
         embedding_function=embeddings
     )
-    except Exception as e:
+  
     st.error(f"Oracle Error Details: {e}")
     # This will print the ORA-XXXXX code so we know exactly what's wrong.
     
