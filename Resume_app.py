@@ -30,7 +30,7 @@ def init_connections():
         )
         # UPDATED: Using text-embedding-004 for better stability with new keys
         embeddings = GoogleGenerativeAIEmbeddings(
-            model="models/text-embedding-004", 
+            model="models/text-embedding-001", 
             google_api_key=st.secrets["GOOGLE_API_KEY"]
         )
         llm = ChatGoogleGenerativeAI(
