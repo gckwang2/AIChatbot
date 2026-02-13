@@ -8,7 +8,6 @@ from langchain_classic.chains import RetrievalQA
 # --- 1. Page Config ---
 st.set_page_config(page_title="Freddy Goh's AI Skills", layout="centered")
 
-# Gemini-style CSS for clean aesthetics
 st.markdown("""
     <style>
     .stApp { max-width: 800px; margin: 0 auto; }
@@ -49,27 +48,25 @@ def init_connections():
 vector_store, llm = init_connections()
 
 # --- 3. Chat Session State ---
-# This mimics the chat memory of Gemini
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        {"role": "assistant", "content": "Hello! I'm Freddy's AI assistant. Paste a job description or ask me about Freddy's technical skills."}
+        {"role": "assistant", "content": "Hello! I'm Freddy's AI assistant. Ask me about Freddy's technical skills."}
     ]
 
-# Display chat history
+# Display history
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# --- 4. Chat Input (The Gemini bar at the bottom) ---
-if prompt := st.chat_input("Ask about Freddy's skills..."):
-    # Add user message to history
+# --- 4. Chat Input ---
+# Added a unique key to prevent the Duplicate ID error
+if prompt := st.chat_input("Ask about Freddy's skills...", key="freddy_ai_input"):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Generate AI Response
     with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
+        with st.spinner("Searching..."):
             template = """
             SYSTEM: Expert Career Coach. Context is from Freddy's resume.
             CONTEXT: {context}
@@ -78,16 +75,19 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
             """
             PROMPT = PromptTemplate(template=template, input_variables=["context", "question"])
             
+            # FIXED: search_type="similarity" and k=5 for instant speed
             chain = RetrievalQA.from_chain_type(
                 llm=llm,
                 chain_type="stuff",
-                retriever=vector_store.as_retriever(search_type="mmr", search_kwargs={"k": 8}),
+                retriever=vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5}),
                 chain_type_kwargs={"prompt": PROMPT}
             )
             
             response = chain.invoke(prompt)
             full_response = response["result"]
-            st.markdown(full_response)
             
-    # Add assistant response to history
+            # ADDED: Streaming effect for a better UX
+            st.write_stream(iter(full_response.split(" ")))
+            
+    # FIXED: This line is now INSIDE the if-block to prevent the crash
     st.session_state.messages.append({"role": "assistant", "content": full_response})
