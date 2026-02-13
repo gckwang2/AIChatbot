@@ -9,3 +9,4 @@ langchain-community
 oracledb
 langchain-community
 langchain
+python-dotenv
