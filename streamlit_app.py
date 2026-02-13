@@ -30,10 +30,11 @@ GUARDRAILS:
 
 # 5. Initialize the LangGraph Agent
 # 'tools=[]' is where you will add your Vector DB search tool later.
+
 agent_executor = create_react_agent(
     model, 
     tools=[], 
-    state_modifier=SystemMessage(content=SYSTEM_PROMPT)
+    state_modifier=SystemMessage(content=SYSTEM_PROMPT) # This line is causing the error
 )
 
 # 6. Session State for Chat History
