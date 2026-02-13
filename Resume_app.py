@@ -47,8 +47,11 @@ def init_connections():
     v_store = OracleVS(
         client=conn,
         table_name="RESUME_SEARCH_V2",
-        embedding_function=embeddings  # <--- This must match the variable name above
+        embedding_function=embeddings
     )
+    except Exception as e:
+    st.error(f"Oracle Error Details: {e}")
+    # This will print the ORA-XXXXX code so we know exactly what's wrong.
     
     # 4. Init Gemini 3 Flash
     llm = ChatGoogleGenerativeAI(
