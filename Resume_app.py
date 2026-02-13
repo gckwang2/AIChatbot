@@ -27,7 +27,7 @@ def init_connections():
     
     # Init Embeddings
     embed_model = GoogleGenerativeAIEmbeddings(
-        model="gemini-embedding-001",
+        model="gemini-3-flash-preview",
         google_api_key=st.secrets["GOOGLE_API_KEY"]
     )
     
