@@ -6,3 +6,6 @@ google-generativeai
 pypdf
 chromadb
 langchain-community
+oracledb
+langchain-community
+langchain
