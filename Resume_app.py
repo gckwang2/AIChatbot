@@ -1,9 +1,13 @@
 import streamlit as st
 import oracledb
+import os
+
+# New modular imports for 2026
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_community.vectorstores import OracleVS
-from langchain.chains import RetrievalQA
+from langchain.chains import RetrievalQA  # This now lives here or in langchain.chains.retrieval_qa
 from langchain.prompts import PromptTemplate
+from langchain_core.documents import Document
 
 # --- 1. Page Config ---
 st.set_page_config(page_title="AI Resume Architect", layout="wide")
