@@ -8,6 +8,7 @@ from langchain_classic.chains import RetrievalQA
 # --- 1. Page Config ---
 st.set_page_config(page_title="Freddy Goh's AI Skills", layout="centered")
 
+# Gemini-style CSS for clean aesthetics
 st.markdown("""
     <style>
     .stApp { max-width: 800px; margin: 0 auto; }
@@ -27,8 +28,9 @@ def init_connections():
             password=st.secrets["DB_PASSWORD"],
             dsn=st.secrets["DB_DSN"]
         )
+        # UPDATED: Using text-embedding-004 for better stability with new keys
         embeddings = GoogleGenerativeAIEmbeddings(
-            model="models/gemini-embedding-001", 
+            model="models/text-embedding-004", 
             google_api_key=st.secrets["GOOGLE_API_KEY"]
         )
         llm = ChatGoogleGenerativeAI(
@@ -59,35 +61,42 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
 
 # --- 4. Chat Input ---
-# Added a unique key to prevent the Duplicate ID error
 if prompt := st.chat_input("Ask about Freddy's skills...", key="freddy_ai_input"):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        with st.spinner("Searching..."):
-            template = """
-            SYSTEM: Expert Career Coach. Context is from Freddy's resume.
-            CONTEXT: {context}
-            QUESTION: {question}
-            INSTRUCTIONS: Map skills, write a summary, and extract achievements with metrics.
-            """
-            PROMPT = PromptTemplate(template=template, input_variables=["context", "question"])
-            
-            # FIXED: search_type="similarity" and k=5 for instant speed
-            chain = RetrievalQA.from_chain_type(
-                llm=llm,
-                chain_type="stuff",
-                retriever=vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5}),
-                chain_type_kwargs={"prompt": PROMPT}
-            )
-            
-            response = chain.invoke(prompt)
-            full_response = response["result"]
-            
-            # ADDED: Streaming effect for a better UX
-            st.write_stream(iter(full_response.split(" ")))
-            
-    # FIXED: This line is now INSIDE the if-block to prevent the crash
-    st.session_state.messages.append({"role": "assistant", "content": full_response})
+        full_response = "" # Initialize to prevent NameError
+        with st.spinner("Analyzing..."):
+            try:
+                template = """
+                SYSTEM: Expert Career Coach. Context is from Freddy's resume.
+                CONTEXT: {context}
+                QUESTION: {question}
+                INSTRUCTIONS: Map skills, write a summary, and extract achievements with metrics.
+                """
+                PROMPT = PromptTemplate(template=template, input_variables=["context", "question"])
+                
+                chain = RetrievalQA.from_chain_type(
+                    llm=llm,
+                    chain_type="stuff",
+                    retriever=vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5}),
+                    chain_type_kwargs={"prompt": PROMPT}
+                )
+                
+                response = chain.invoke(prompt)
+                full_response = response["result"]
+                
+                # Streaming effect
+                st.write_stream(iter(full_response.split(" ")))
+                
+                # Save to history ONLY if successful
+                st.session_state.messages.append({"role": "assistant", "content": full_response})
+
+            except Exception as e:
+                error_msg = f"⚠️ API Error: {str(e)}"
+                if "API key expired" in error_msg:
+                    st.error("Your Google API Key has expired. Please update it in Streamlit Secrets.")
+                else:
+                    st.error(f"An unexpected error occurred: {e}")
