@@ -34,12 +34,13 @@ embeddings = GoogleGenerativeAIEmbeddings(
 )
 
     # Init Embeddings
-    embed_model = GoogleGenerativeAIEmbeddings(
-        model="gemini-3-flash-preview",
-        google_api_key=st.secrets["GOOGLE_API_KEY"]
-        temperature=0.2
-    )
-    
+    # --- 2. Fix the Chat/Generation Model ---
+# This is where your 'gemini-3-flash-preview' belongs.
+llm = ChatGoogleGenerativeAI(
+    model="gemini-3-flash-preview",
+    google_api_key=st.secrets["GOOGLE_API_KEY"],
+    temperature=0.2
+)
     # Init Vector Store
     v_store = OracleVS(
         client=conn,
