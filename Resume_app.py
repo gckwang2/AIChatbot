@@ -1,80 +1,77 @@
 import streamlit as st
 import oracledb
-
-# --- 2026 Modular Imports ---
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_community.vectorstores import OracleVS
-from langchain_core.prompts import PromptTemplate, ChatPromptTemplate
-from langchain_core.documents import Document
-
-# Use langchain-classic for the legacy RetrievalQA if you aren't ready to move to LCEL
+from langchain_core.prompts import PromptTemplate
 from langchain_classic.chains import RetrievalQA
 
 # --- 1. Page Config ---
-st.set_page_config(page_title="Freddy Goh's skills queries tools", layout="wide")
-st.title("🤖 Freddy Goh's AI Skills queries tools")
-st.markdown("Try using technical keywords Queries - some functions may not works")
-st.markdown("Response with Freddy Goh's resume using Oracle vector database AI & Gemini 3 Flash. Disclaimer: use with care")
+st.set_page_config(page_title="Freddy Goh's AI Skills", layout="centered")
 
+# Gemini-style CSS for clean aesthetics
+st.markdown("""
+    <style>
+    .stApp { max-width: 800px; margin: 0 auto; }
+    .stChatMessage { background-color: transparent !important; }
+    </style>
+    """, unsafe_allow_html=True)
 
-# --- 2. Resource Caching (Prevents reconnecting on every click) ---
-@st.cache_resource
+st.title("🤖 Freddy Goh's AI Skills Tool")
+st.caption("Powered by Oracle 23ai Vector Search & Gemini 3 Flash")
+
+# --- 2. Connections ---
 @st.cache_resource
 def init_connections():
-    # 1. Initialize variables as None so the return statement always works
-    v_store, llm = None, None 
-    
     try:
-        # 2. Connect to Oracle
         conn = oracledb.connect(
             user=st.secrets["DB_USER"],
             password=st.secrets["DB_PASSWORD"],
             dsn=st.secrets["DB_DSN"]
         )
-        
-        # 3. Init Embeddings & LLM
-        # Change "models/embedding-001" to "models/gemini-embedding-001"
         embeddings = GoogleGenerativeAIEmbeddings(
             model="models/gemini-embedding-001", 
             google_api_key=st.secrets["GOOGLE_API_KEY"]
         )
-        
         llm = ChatGoogleGenerativeAI(
             model="gemini-3-flash-preview",
             google_api_key=st.secrets["GOOGLE_API_KEY"]
         )
-        
-        # 4. Init Vector Store (This is where v_store gets defined)
         v_store = OracleVS(
             client=conn,
             table_name="RESUME_SEARCH_V2",
             embedding_function=embeddings
         )
-        
-        st.success("✅ Database and AI connected successfully!")
-        return v_store, llm # Return here if everything worked
-
+        return v_store, llm
     except Exception as e:
         st.error(f"❌ Connection Failed: {e}")
-        st.stop() # Stop the app so it doesn't try to return undefined variables
+        st.stop()
 
 vector_store, llm = init_connections()
 
-# --- 3. Layout ---
-col1, col2 = st.columns([1, 1])
+# --- 3. Chat Session State ---
+# This mimics the chat memory of Gemini
+if "messages" not in st.session_state:
+    st.session_state.messages = [
+        {"role": "assistant", "content": "Hello! I'm Freddy's AI assistant. Paste a job description or ask me about Freddy's technical skills."}
+    ]
 
-with col1:
-    st.subheader("Target Job Description")
-    jd_text = st.text_area("Paste your skill queries here:", height=400, placeholder="We are looking for an Oracle Cloud expert...")
-    generate_btn = st.button("Architect My Resume", type="primary")
+# Display chat history
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
-with col2:
-    st.subheader("Results extracted from Freddy's Goh resume")
-    if generate_btn and jd_text:
-        with st.spinner("Analyzing Freddy's history..."):
-            # Setup RAG Chain
+# --- 4. Chat Input (The Gemini bar at the bottom) ---
+if prompt := st.chat_input("Ask about Freddy's skills..."):
+    # Add user message to history
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    # Generate AI Response
+    with st.chat_message("assistant"):
+        with st.spinner("Thinking..."):
             template = """
-            SYSTEM: Expert Career Coach. Context is from Freddy's resume versions.
+            SYSTEM: Expert Career Coach. Context is from Freddy's resume.
             CONTEXT: {context}
             QUESTION: {question}
             INSTRUCTIONS: Map skills, write a summary, and extract achievements with metrics.
@@ -84,12 +81,13 @@ with col2:
             chain = RetrievalQA.from_chain_type(
                 llm=llm,
                 chain_type="stuff",
-                retriever=vector_store.as_retriever(search_type="mmr", search_kwargs={"k": 12}),
+                retriever=vector_store.as_retriever(search_type="mmr", search_kwargs={"k": 8}),
                 chain_type_kwargs={"prompt": PROMPT}
             )
             
-            # Run
-            result = chain.invoke(jd_text)
-            st.markdown(result["result"])
-    else:
-        st.info("AI search result in here.")
+            response = chain.invoke(prompt)
+            full_response = response["result"]
+            st.markdown(full_response)
+            
+    # Add assistant response to history
+    st.session_state.messages.append({"role": "assistant", "content": full_response})
