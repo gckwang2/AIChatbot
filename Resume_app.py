@@ -68,33 +68,33 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
         st.markdown(prompt)
 
     # Generate AI Response
+if prompt := st.chat_input("Ask about Freddy's skills..."):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
     with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
-            template = """
-            SYSTEM: Expert Career Coach. Context is from Freddy's resume.
-            CONTEXT: {context}
-            QUESTION: {question}
-            INSTRUCTIONS: Map skills, write a summary, and extract achievements with metrics.
-            """
-            PROMPT = PromptTemplate(template=template, input_variables=["context", "question"])
-            
+        # Create a placeholder for the "typing" effect
+        response_placeholder = st.empty()
+        full_response = ""
+        
+        # We use a simple spinner while the search happens
+        with st.spinner("Searching Freddy's history..."):
+            # Update k=5 and similarity for speed
             chain = RetrievalQA.from_chain_type(
                 llm=llm,
                 chain_type="stuff",
-                retriever=vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5})
+                retriever=vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5}),
                 chain_type_kwargs={"prompt": PROMPT}
             )
             
-            response = chain.invoke(prompt)
-            full_response = response["result"]
-            with st.chat_message("assistant"):
-            response_placeholder = st.empty()
-            full_response = ""
-            # Use st.write_stream if your langchain version supports it, 
-            # or a simple loop for the chain response
+            # Streaming the result
+            # Note: For legacy RetrievalQA, it returns the whole block, 
+            # but using st.write_stream makes it feel smoother.
             result = chain.invoke(prompt)
             full_response = result["result"]
-            st.write(full_response)
             
-    # Add assistant response to history
+        # This gives that Gemini "fade-in" or typing effect
+        st.write_stream(iter(full_response.split(" "))) 
+            
     st.session_state.messages.append({"role": "assistant", "content": full_response})
