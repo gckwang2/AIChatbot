@@ -24,11 +24,20 @@ def init_connections():
         password=st.secrets["DB_PASSWORD"],
         dsn=st.secrets["DB_DSN"]
     )
-    
+
+    # --- 1. Fix the Embeddings Model ---
+# 'text-embedding-004' is the stable standard for 2026.
+# If that fails, 'gemini-embedding-001' is the new high-performance alternative.
+embeddings = GoogleGenerativeAIEmbeddings(
+    model="text-embedding-001", 
+    google_api_key=st.secrets["GOOGLE_API_KEY"]
+)
+
     # Init Embeddings
     embed_model = GoogleGenerativeAIEmbeddings(
         model="gemini-3-flash-preview",
         google_api_key=st.secrets["GOOGLE_API_KEY"]
+        temperature=0.2
     )
     
     # Init Vector Store
