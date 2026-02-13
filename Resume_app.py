@@ -46,7 +46,7 @@ def init_connections():
     # Ensure 'embedding_function' uses the 'embeddings' variable from above
     v_store = OracleVS(
         client=conn,
-        table_name="RESUME_SEARCH",
+        table_name="RESUME_SEARCH_V2",
         embedding_function=embeddings  # <--- This must match the variable name above
     )
     
