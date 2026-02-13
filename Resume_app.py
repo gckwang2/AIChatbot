@@ -81,13 +81,20 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
             chain = RetrievalQA.from_chain_type(
                 llm=llm,
                 chain_type="stuff",
-                retriever=vector_store.as_retriever(search_type="mmr", search_kwargs={"k": 8}),
+                retriever=vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5})
                 chain_type_kwargs={"prompt": PROMPT}
             )
             
             response = chain.invoke(prompt)
             full_response = response["result"]
-            st.markdown(full_response)
+            with st.chat_message("assistant"):
+            response_placeholder = st.empty()
+            full_response = ""
+            # Use st.write_stream if your langchain version supports it, 
+            # or a simple loop for the chain response
+            result = chain.invoke(prompt)
+            full_response = result["result"]
+            st.write(full_response)
             
     # Add assistant response to history
     st.session_state.messages.append({"role": "assistant", "content": full_response})
