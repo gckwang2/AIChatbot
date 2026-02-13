@@ -11,7 +11,7 @@ from langchain_core.documents import Document
 from langchain_classic.chains import RetrievalQA
 
 # --- 1. Page Config ---
-st.set_page_config(page_title="Freddy Goh's AI Skills queries tools", layout="wide")
+st.set_page_config(page_title="Freddy Goh's skills queries tools", layout="wide")
 st.title("🤖 Freddy Goh's AI Skills queries tools")
 st.markdown("Try using technical keywords Queries - some functions may not works")
 st.markdown("Response with Freddy Goh's resume using Oracle vector database AI & Gemini 3 Flash. Disclaimer: use with care")
@@ -65,16 +65,16 @@ col1, col2 = st.columns([1, 1])
 
 with col1:
     st.subheader("Target Job Description")
-    jd_text = st.text_area("Paste the JD here:", height=400, placeholder="We are looking for an Oracle Cloud expert...")
+    jd_text = st.text_area("Paste your skill queries here:", height=400, placeholder="We are looking for an Oracle Cloud expert...")
     generate_btn = st.button("Architect My Resume", type="primary")
 
 with col2:
-    st.subheader("Results extracted from Freddy's Goh")
+    st.subheader("Results extracted from Freddy's Goh resume")
     if generate_btn and jd_text:
-        with st.spinner("Analyzing your history..."):
+        with st.spinner("Analyzing Freddy's history..."):
             # Setup RAG Chain
             template = """
-            SYSTEM: Expert Career Coach. Context is from 106 resume versions.
+            SYSTEM: Expert Career Coach. Context is from Freddy's resume versions.
             CONTEXT: {context}
             QUESTION: {question}
             INSTRUCTIONS: Map skills, write a summary, and extract achievements with metrics.
@@ -92,4 +92,4 @@ with col2:
             result = chain.invoke(jd_text)
             st.markdown(result["result"])
     else:
-        st.info("Paste a Job Description on the left and click 'Architect' to begin.")
+        st.info("AI search result in here.")
