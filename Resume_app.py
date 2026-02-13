@@ -13,8 +13,8 @@ from langchain_classic.chains import RetrievalQA
 # --- 1. Page Config ---
 st.set_page_config(page_title="Freddy Goh AI Skills queries tools", layout="wide")
 st.title("🤖 Try using technical keywords Queries - some functions may not works")
-st.markdown("Response with Freddy Goh's resume using Oracle vector database AI & Gemini 3 Flash.")
-st.markdown("Use with care")
+st.markdown("Response with Freddy Goh's resume using Oracle vector database AI & Gemini 3 Flash. se with care")
+
 
 # --- 2. Resource Caching (Prevents reconnecting on every click) ---
 @st.cache_resource
