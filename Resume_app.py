@@ -18,12 +18,21 @@ st.markdown("Tailor your 106 resume versions to any job description using Oracle
 # --- 2. Resource Caching (Prevents reconnecting on every click) ---
 @st.cache_resource
 def init_connections():
-    # Connect to Oracle
-    conn = oracledb.connect(
-        user=st.secrets["DB_USER"],
-        password=st.secrets["DB_PASSWORD"],
-        dsn=st.secrets["DB_DSN"]
-    )
+    try:
+        # Connect using the new user from secrets
+        conn = oracledb.connect(
+            user=st.secrets["DB_USER"],
+            password=st.secrets["DB_PASSWORD"],
+            dsn=st.secrets["DB_DSN"]
+        )
+        # If connection works, proceed to vector store
+        # ... your vector store and LLM code here ...
+        return v_store, llm
+        
+    except oracledb.DatabaseError as e:
+        # This will show the real error (e.g., Invalid Username/Password)
+        st.error(f"❌ Oracle Connection Error: {e}")
+        st.stop()
 
     # --- 1. Fix the Embeddings Model ---
     # 'text-embedding-004' is the stable standard for 2026.
