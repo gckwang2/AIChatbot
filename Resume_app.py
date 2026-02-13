@@ -17,59 +17,43 @@ st.markdown("Tailor your 106 resume versions to any job description using Oracle
 
 # --- 2. Resource Caching (Prevents reconnecting on every click) ---
 @st.cache_resource
+@st.cache_resource
 def init_connections():
+    # 1. Initialize variables as None so the return statement always works
+    v_store, llm = None, None 
+    
     try:
-        # Connect using the new user from secrets
+        # 2. Connect to Oracle
         conn = oracledb.connect(
             user=st.secrets["DB_USER"],
             password=st.secrets["DB_PASSWORD"],
             dsn=st.secrets["DB_DSN"]
         )
-        # If connection works, proceed to vector store
-        # ... your vector store and LLM code here ...
-        return v_store, llm
         
-    except oracledb.DatabaseError as e:
-        # This will show the real error (e.g., Invalid Username/Password)
-        st.error(f"❌ Oracle Connection Error: {e}")
-        st.stop()
+        # 3. Init Embeddings & LLM
+        embeddings = GoogleGenerativeAIEmbeddings(
+            model="models/embedding-001", 
+            google_api_key=st.secrets["GOOGLE_API_KEY"]
+        )
+        
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-3-flash-preview",
+            google_api_key=st.secrets["GOOGLE_API_KEY"]
+        )
+        
+        # 4. Init Vector Store (This is where v_store gets defined)
+        v_store = OracleVS(
+            client=conn,
+            table_name="RESUME_SEARCH_V2",
+            embedding_function=embeddings
+        )
+        
+        st.success("✅ Database and AI connected successfully!")
+        return v_store, llm # Return here if everything worked
 
-    # --- 1. Fix the Embeddings Model ---
-    # 'text-embedding-004' is the stable standard for 2026.
-    # If that fails, 'gemini-embedding-001' is the new high-performance alternative.
-    embeddings = GoogleGenerativeAIEmbeddings(
-    model="text-embedding-001", 
-    google_api_key=st.secrets["GOOGLE_API_KEY"]
-    )
-
-    # Init Embeddings
-    # --- 2. Fix the Chat/Generation Model ---
-    # This is where your 'gemini-3-flash-preview' belongs.
-    llm = ChatGoogleGenerativeAI(
-    model="gemini-3-flash-preview",
-    google_api_key=st.secrets["GOOGLE_API_KEY"],
-    temperature=0.2
-    )
-    
-    # 3. Init Vector Store 
-    # Ensure 'embedding_function' uses the 'embeddings' variable from above
-    v_store = OracleVS(
-        client=conn,
-        table_name="RESUME_SEARCH_V2",
-        embedding_function=embeddings
-    )
-  
-    st.error(f"Oracle Error Details: {e}")
-    # This will print the ORA-XXXXX code so we know exactly what's wrong.
-    
-    # 4. Init Gemini 3 Flash
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-3-flash-preview",
-        google_api_key=st.secrets["GOOGLE_API_KEY"],
-        temperature=0.2
-    )
-    
-    return v_store, llm
+    except Exception as e:
+        st.error(f"❌ Connection Failed: {e}")
+        st.stop() # Stop the app so it doesn't try to return undefined variables
 
 vector_store, llm = init_connections()
 
