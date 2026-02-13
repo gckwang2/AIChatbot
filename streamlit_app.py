@@ -34,7 +34,7 @@ GUARDRAILS:
 agent_executor = create_react_agent(
     model, 
     tools=[], 
-    state_modifier=SystemMessage(content=SYSTEM_PROMPT) # This line is causing the error
+    prompt=SYSTEM_PROMPT 
 )
 
 # 6. Session State for Chat History
