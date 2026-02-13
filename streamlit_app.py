@@ -14,7 +14,7 @@ if "GOOGLE_API_KEY" not in st.secrets:
 
 # 3. Initialize the LLM (Gemini 2.0 Flash is fast and free-tier friendly)
 model = ChatGoogleGenerativeAI(
-    model="gemini-2.0-flash", 
+    model="gemini-1.5-flash",  # Change from 2.0 to 1.5
     google_api_key=st.secrets["GOOGLE_API_KEY"]
 )
 
