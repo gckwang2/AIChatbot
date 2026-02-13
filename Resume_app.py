@@ -11,9 +11,10 @@ from langchain_core.documents import Document
 from langchain_classic.chains import RetrievalQA
 
 # --- 1. Page Config ---
-st.set_page_config(page_title="AI Resume Architect", layout="wide")
-st.title("🤖 Personal Resume Queries")
-st.markdown("Tailor your 106 resume versions to any job description using Oracle AI & Gemini 1.5 Flash.")
+st.set_page_config(page_title="Freddy Goh AI Skills queries tools", layout="wide")
+st.title("🤖 Try using technical keywords Queries - some functions may not works")
+st.markdown("Response with Freddy Goh's resume using Oracle vector database AI & Gemini 3 Flash.")
+st.markdown("Use with care")
 
 # --- 2. Resource Caching (Prevents reconnecting on every click) ---
 @st.cache_resource
