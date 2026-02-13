@@ -41,16 +41,18 @@ def init_connections():
     google_api_key=st.secrets["GOOGLE_API_KEY"],
     temperature=0.2
     )
-    # Init Vector Store
+    
+    # 3. Init Vector Store 
+    # Ensure 'embedding_function' uses the 'embeddings' variable from above
     v_store = OracleVS(
         client=conn,
         table_name="RESUME_SEARCH",
-        embedding_function=embed_model
+        embedding_function=embeddings  # <--- This must match the variable name above
     )
     
-    # Init Gemini 1.5 Flash
+    # 4. Init Gemini 3 Flash
     llm = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash",
+        model="gemini-3-flash-preview",
         google_api_key=st.secrets["GOOGLE_API_KEY"],
         temperature=0.2
     )
