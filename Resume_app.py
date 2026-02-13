@@ -31,8 +31,9 @@ def init_connections():
         )
         
         # 3. Init Embeddings & LLM
+        # Change "models/embedding-001" to "models/gemini-embedding-001"
         embeddings = GoogleGenerativeAIEmbeddings(
-            model="models/embedding-001", 
+            model="models/gemini-embedding-001", 
             google_api_key=st.secrets["GOOGLE_API_KEY"]
         )
         
