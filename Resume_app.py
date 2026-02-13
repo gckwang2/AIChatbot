@@ -68,7 +68,7 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
         st.markdown(prompt)
 
     # Generate AI Response
-if prompt := st.chat_input("Ask about Freddy's skills..."):
+if prompt := st.chat_input("Ask about Freddy's skills...", key="freddy_chat_input"):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
