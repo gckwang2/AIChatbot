@@ -38,7 +38,7 @@ def init_connections():
         )
         v_store = OracleVS(
             client=conn,
-            table_name="RESUME_SEARCH_V2",
+            table_name="RESUME_SEARCH",
             embedding_function=embeddings
         )
         return v_store, llm
