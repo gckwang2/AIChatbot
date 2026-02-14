@@ -48,7 +48,7 @@ def init_connections():
         
         # Use a stable Gemini model name
         llm = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash", 
+            model="gemini-3-flash-preview", 
             google_api_key=st.secrets["GOOGLE_API_KEY"]
         )
         
