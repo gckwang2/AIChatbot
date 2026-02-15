@@ -66,19 +66,21 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
         """
         prompt_template = PromptTemplate(template=template, input_variables=["context", "question"])
 
-        with st.spinner("Searching keywords and semantic context..."):
+      with st.spinner("Searching keywords and semantic context..."):
             try:
-                # We hardcode 'ADMIN' here because that is where the index lives
-                qualified_idx = "ADMIN.RES_IDX"
+                # Now that we have a PUBLIC SYNONYM, we use the name directly.
+                # If this fails, try "ADMIN.RES_IDX" one more time.
+                index_to_use = "RES_IDX" 
 
                 retriever = OracleHybridSearchRetriever(
                     client=conn,
                     vector_store=v_store,
-                    idx_name=qualified_idx, 
+                    idx_name=index_to_use, 
                     search_mode="hybrid", 
                     k=5
                 )
 
+                # Initialize your chain
                 chain = RetrievalQA.from_chain_type(
                     llm=llm,
                     chain_type="stuff",
