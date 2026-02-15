@@ -2,7 +2,7 @@ import streamlit as st
 import oracledb
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_community.vectorstores import OracleVS
-from langchain_community.retrievers import OracleHybridSearchRetriever
+from langchain_oracledb import OracleHybridSearchRetriever
 from langchain_core.prompts import PromptTemplate
 from langchain_classic.chains import RetrievalQA
 
