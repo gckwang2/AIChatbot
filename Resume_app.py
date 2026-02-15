@@ -29,9 +29,12 @@ def init_connections():
             model="gemini-3-flash-preview", 
             google_api_key=st.secrets["GOOGLE_API_KEY"]
         )
+        
+        # 🛠️ Point Vector Store to the ADMIN table
+        # CHATBOT_USER uses the synonym or explicit schema path
         v_store = OracleVS(
             client=conn,
-            table_name="RESUME_SEARCH",
+            table_name="ADMIN.RESUME_SEARCH", 
             embedding_function=embeddings
         )
         return v_store, llm, conn, embeddings
@@ -44,7 +47,7 @@ v_store, llm, conn, embeddings = init_connections()
 # --- 3. Chat Session State ---
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        {"role": "assistant", "content": "Hello! I'm Freddy's AI assistant. Let's try that search again."}
+        {"role": "assistant", "content": "Hello! I'm Freddy's AI assistant. Permissions are set. How can I help?"}
     ]
 
 for message in st.session_state.messages:
@@ -66,10 +69,10 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
         """
         prompt_template = PromptTemplate(template=template, input_variables=["context", "question"])
 
-      with st.spinner("Searching keywords and semantic context..."):
+        with st.spinner("Searching keywords and semantic context..."):
             try:
-                # Now that we have a PUBLIC SYNONYM, we use the name directly.
-                # If this fails, try "ADMIN.RES_IDX" one more time.
+                # 🛠️ Because of the PUBLIC SYNONYM we created as ADMIN, 
+                # CHATBOT_USER can now see 'RES_IDX' directly.
                 index_to_use = "RES_IDX" 
 
                 retriever = OracleHybridSearchRetriever(
@@ -80,7 +83,6 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
                     k=5
                 )
 
-                # Initialize your chain
                 chain = RetrievalQA.from_chain_type(
                     llm=llm,
                     chain_type="stuff",
@@ -89,8 +91,6 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
                 )
                 
                 response = chain.invoke(prompt)
-                st.markdown(response["result"])
-                st.session_state.messages.append({"role": "assistant", "content": response["result"]})
-                
-            except Exception as e:
-                st.error(f"Search Error: {e}")
+                full_response = response["result"]
+                st.markdown(full_response)
+                st.session_state.messages.append
