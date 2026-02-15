@@ -73,15 +73,20 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
             PROMPT = PromptTemplate(template=template, input_variables=["context", "question"])
             
             try:
-                # The 'idx_name' MUST be UPPERCASE to match Oracle's metadata
+                # 1. Get your username from secrets (it must be uppercase for Oracle metadata)
+                db_user = st.secrets["DB_USER"].upper()
+                
+                # 2. Add the schema prefix to the index name
+                # Format should be: "USERNAME"."INDEX_NAME"
+                qualified_index_name = f'"{db_user}"."RES_IDX"'
+            
                 retriever = OracleHybridSearchRetriever(
                     client=conn,
                     vector_store=v_store,
-                    idx_name="RES_IDX", 
+                    idx_name=qualified_index_name, # Use the qualified name
                     search_mode="hybrid", 
                     k=5
                 )
-
                 chain = RetrievalQA.from_chain_type(
                     llm=llm,
                     chain_type="stuff",
