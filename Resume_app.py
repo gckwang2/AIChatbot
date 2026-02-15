@@ -9,7 +9,7 @@ from langchain_classic.chains import RetrievalQA
 st.set_page_config(page_title="Freddy Goh's AI Skills", layout="centered")
 
 st.title("🤖 Freddy's AI Career Assistant")
-st.caption("AI enable search powered by Oracle keyword+vector, RAG, Google embedding, Gemini flash 3.0 LLM ")
+st.caption("Pure Keyword + Vector Fallback Mode Active")
 
 # --- 2. Connections ---
 @st.cache_resource
@@ -69,7 +69,7 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
     with st.chat_message("assistant"):
         # Define the Prompt Template
         template = """
-        SYSTEM: Use the following context from Freddy's resume 
+        SYSTEM: You are an expert Career Coach. Use the following context from Freddy's resume 
         to answer the user's question. If the answer isn't in the context, be honest but 
         highlight related strengths Freddy has.
         
