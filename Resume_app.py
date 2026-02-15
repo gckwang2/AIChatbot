@@ -8,17 +8,7 @@ from langchain_classic.chains import RetrievalQA
 # --- 1. Page Config ---
 st.set_page_config(page_title="Freddy Goh's AI Skills", layout="centered")
 
-st.markdown("""
-    <style>
-    .stApp { max-width: 800px; margin: 0 auto; }
-    .stChatMessage { background-color: transparent !important; }
-    </style>
-    """, unsafe_allow_html=True)
-
-st.title("🤖 Freddy Goh's AI Skills Tool")
-st.caption("Powered by Oracle 23ai Hybrid Search & Gemini 3 Flash")
-
-# --- 2. Connections with Auto-Reconnect ---
+# --- 2. Connections ---
 @st.cache_resource
 def get_db_connection():
     return oracledb.connect(
@@ -30,23 +20,15 @@ def get_db_connection():
 def init_connections():
     try:
         conn = get_db_connection()
-        # Connection Heartbeat check
-        try:
-            conn.ping()
-        except oracledb.Error:
-            st.cache_resource.clear()
-            conn = get_db_connection()
-
+        conn.ping()
         embeddings = GoogleGenerativeAIEmbeddings(
             model="models/gemini-embedding-001", 
             google_api_key=st.secrets["GOOGLE_API_KEY"]
         )
-        
         llm = ChatGoogleGenerativeAI(
             model="gemini-3-flash-preview", 
             google_api_key=st.secrets["GOOGLE_API_KEY"]
         )
-        
         v_store = OracleVS(
             client=conn,
             table_name="RESUME_SEARCH",
@@ -62,7 +44,7 @@ v_store, llm, conn, embeddings = init_connections()
 # --- 3. Chat Session State ---
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        {"role": "assistant", "content": "Hello! I'm Freddy's AI assistant. Hybrid Search is now active. How can I help?"}
+        {"role": "assistant", "content": "Hello! I'm Freddy's AI assistant. How can I help?"}
     ]
 
 for message in st.session_state.messages:
@@ -76,30 +58,32 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-       with st.spinner("Searching keywords and semantic context..."):
-            # Logic to handle potential schema issues
-            user_prefix = st.secrets["DB_USER"].upper()
-            
-            try:
-                # We pass the index name in plain UPPERCASE. 
-                # If the plain name fails, the driver might need the owner prefix.
-                index_to_use = "RES_IDX" 
+        # 🟢 FIX 1: Define the PROMPT outside the try block so it's always available
+        template = """
+        SYSTEM: Expert Career Coach. Use the context from Freddy's resume.
+        CONTEXT: {context}
+        QUESTION: {question}
+        INSTRUCTIONS: Provide a professional summary and highlight achievements.
+        """
+        prompt_template = PromptTemplate(template=template, input_variables=["context", "question"])
 
+        with st.spinner("Searching keywords and semantic context..."):
+            try:
+                # 🟢 FIX 2: Ensure the index name is exactly what Oracle expects
+                # We use the plain string because we recreated it in SQL as RES_IDX
                 retriever = OracleHybridSearchRetriever(
                     client=conn,
                     vector_store=v_store,
-                    idx_name=index_to_use, 
+                    idx_name="RES_IDX", 
                     search_mode="hybrid", 
                     k=5
                 )
-
-                # Rest of your chain logic...
 
                 chain = RetrievalQA.from_chain_type(
                     llm=llm,
                     chain_type="stuff",
                     retriever=retriever,
-                    chain_type_kwargs={"prompt": PROMPT}
+                    chain_type_kwargs={"prompt": prompt_template} # Use the variable name we defined
                 )
                 
                 response = chain.invoke(prompt)
@@ -108,5 +92,6 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
                 
             except Exception as e:
+                # This catches the "DRG-10502" if Oracle still isn't seeing the index
                 st.error(f"Search Error: {e}")
-                st.info("Check if RES_IDX exists in the DB with: SELECT index_name FROM user_indexes;")
+                st.info("If it says 'Index does not exist', run EXEC CTX_DDL.SYNC_INDEX('RES_IDX'); and COMMIT; in your SQL tool.")
