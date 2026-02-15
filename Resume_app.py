@@ -30,11 +30,10 @@ def init_connections():
             google_api_key=st.secrets["GOOGLE_API_KEY"]
         )
         
-        # 🛠️ Point Vector Store to the ADMIN table
-        # CHATBOT_USER uses the synonym or explicit schema path
+        # 🟢 SIMPLIFIED: No "ADMIN." prefix needed now that we log in as ADMIN
         v_store = OracleVS(
             client=conn,
-            table_name="ADMIN.RESUME_SEARCH", 
+            table_name="RESUME_SEARCH", 
             embedding_function=embeddings
         )
         return v_store, llm, conn, embeddings
@@ -47,7 +46,7 @@ v_store, llm, conn, embeddings = init_connections()
 # --- 3. Chat Session State ---
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        {"role": "assistant", "content": "Hello! I'm Freddy's AI assistant. Permissions are set. How can I help?"}
+        {"role": "assistant", "content": "Hello! I'm Freddy's assistant. Logging in as ADMIN now. How can I help?"}
     ]
 
 for message in st.session_state.messages:
@@ -65,13 +64,13 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
         SYSTEM: Expert Career Coach. Use the context from Freddy's resume.
         CONTEXT: {context}
         QUESTION: {question}
-        INSTRUCTIONS: Provide a professional summary and highlight achievements.
+        INSTRUCTIONS: Summarize skills professionally.
         """
         prompt_template = PromptTemplate(template=template, input_variables=["context", "question"])
 
         with st.spinner("Searching keywords and semantic context..."):
             try:
-                # Use the public synonym name
+                # 🟢 SIMPLIFIED: Plain index name
                 index_to_use = "RES_IDX" 
 
                 retriever = OracleHybridSearchRetriever(
@@ -82,7 +81,6 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
                     k=5
                 )
 
-                # Initialize your chain
                 chain = RetrievalQA.from_chain_type(
                     llm=llm,
                     chain_type="stuff",
@@ -97,4 +95,3 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
                 
             except Exception as e:
                 st.error(f"Search Error: {e}")
-                st.info("Check if the PUBLIC SYNONYM exists in the DB.")
