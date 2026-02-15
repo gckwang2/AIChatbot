@@ -72,7 +72,7 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
             """
             PROMPT = PromptTemplate(template=template, input_variables=["context", "question"])
             
-          try:
+              try:
                 # 1. Use the name in plain UPPERCASE without the schema or extra quotes
                 # Oracle will look in the logged-in user's schema (ADMIN) automatically.
                 index_to_use = "RES_IDX" 
