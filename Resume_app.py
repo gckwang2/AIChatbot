@@ -44,7 +44,7 @@ v_store, llm, conn, embeddings = init_connections()
 # --- 3. Chat Session State ---
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        {"role": "assistant", "content": "Hello! I'm Freddy's AI assistant. How can I help?"}
+        {"role": "assistant", "content": "Hello! I'm Freddy's AI assistant. Let's try that search again."}
     ]
 
 for message in st.session_state.messages:
@@ -58,7 +58,6 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        # 🟢 FIX 1: Define the PROMPT outside the try block so it's always available
         template = """
         SYSTEM: Expert Career Coach. Use the context from Freddy's resume.
         CONTEXT: {context}
@@ -69,12 +68,15 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
 
         with st.spinner("Searching keywords and semantic context..."):
             try:
-                # 🟢 FIX 2: Ensure the index name is exactly what Oracle expects
-                # We use the plain string because we recreated it in SQL as RES_IDX
+                # 🛠️ THE FIX: Explicitly qualify the index with the Schema Owner
+                # Oracle metadata is case-sensitive; st.secrets usually returns lowercase
+                schema_owner = st.secrets["DB_USER"].upper()
+                qualified_idx = f"{schema_owner}.RES_IDX"
+
                 retriever = OracleHybridSearchRetriever(
                     client=conn,
                     vector_store=v_store,
-                    idx_name="RES_IDX", 
+                    idx_name=qualified_idx, # Now looks like "ADMIN.RES_IDX"
                     search_mode="hybrid", 
                     k=5
                 )
@@ -83,7 +85,7 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
                     llm=llm,
                     chain_type="stuff",
                     retriever=retriever,
-                    chain_type_kwargs={"prompt": prompt_template} # Use the variable name we defined
+                    chain_type_kwargs={"prompt": prompt_template}
                 )
                 
                 response = chain.invoke(prompt)
@@ -92,6 +94,5 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
                 
             except Exception as e:
-                # This catches the "DRG-10502" if Oracle still isn't seeing the index
                 st.error(f"Search Error: {e}")
-                st.info("If it says 'Index does not exist', run EXEC CTX_DDL.SYNC_INDEX('RES_IDX'); and COMMIT; in your SQL tool.")
+                st.info("Try clicking 'Clear Cache' in the top-right Streamlit menu to refresh the DB connection.")
