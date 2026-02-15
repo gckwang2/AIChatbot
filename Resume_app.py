@@ -3,12 +3,13 @@ import oracledb
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_oracledb import OracleVS
 from langchain_core.prompts import PromptTemplate
-from langchain.chains import RetrievalQA
+from langchain_classic.chains import RetrievalQA
 
-# --- 1. Page Config & Branding ---
-st.set_page_config(page_title="Freddy Goh's Executive AI", layout="centered")
-st.title("💼 Freddy's Executive AI Assistant")
-st.caption("Powered by Oracle 23ai & Gemini 3 Pro Reasoning")
+# --- 1. Page Config ---
+st.set_page_config(page_title="Freddy Goh's AI Skills", layout="centered")
+
+st.title("🤖 Freddy's AI Career Assistant")
+st.caption("AI enable search powered by Oracle keyword+vector, RAG, Google embedding, Gemini flash 3.0 LLM ")
 
 # --- 2. Connections ---
 @st.cache_resource
@@ -24,79 +25,77 @@ def init_connections():
         conn = get_db_connection()
         conn.ping()
         
-        # 🟢 2026 Recommended Embeddings
+        # Embeddings Model
         embeddings = GoogleGenerativeAIEmbeddings(
-            model="models/text-embedding-004", # Latest stable embedding model
+            model="models/gemini-embedding-001", 
             google_api_key=st.secrets["GOOGLE_API_KEY"]
         )
         
-        # 🟢 Gemini 3 Pro for High-Quality Resume Reasoning
+        # Chat Model
         llm = ChatGoogleGenerativeAI(
-            model="gemini-3-pro-preview", 
-            google_api_key=st.secrets["GOOGLE_API_KEY"],
-            temperature=0.75, # Balanced for professional flair
-            max_output_tokens=1024
+            model="gemini-3-flash-preview", 
+            google_api_key=st.secrets["GOOGLE_API_KEY"]
         )
         
+        # Vector Store (The Fallback Engine)
         v_store = OracleVS(
             client=conn,
             table_name="RESUME_SEARCH", 
             embedding_function=embeddings
         )
-        return v_store, llm
+        return v_store, llm, conn
     except Exception as e:
         st.error(f"❌ Connection Failed: {e}")
         st.stop()
 
-v_store, llm = init_connections()
+v_store, llm, conn = init_connections()
 
-# --- 3. Professional System Prompt ---
-# This turns the model from a basic chatbot into an Executive Recruiter
-template = """
-SYSTEM: You are an Elite Executive Recruiter. Your task is to analyze Freddy's resume 
-and answer questions with high-impact, professional language. 
-
-STRATEGY:
-- Use strong action verbs (Spearheaded, Optimized, Orchestrated).
-- Highlight quantifiable achievements from the context.
-- If the information isn't present, highlight a relevant transferable skill.
-
-CONTEXT: {context}
-QUESTION: {question}
-
-PROFESSIONAL SUMMARY:
-"""
-prompt_template = PromptTemplate(template=template, input_variables=["context", "question"])
-
-# --- 4. Chat Interface ---
+# --- 3. Chat Session State ---
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        {"role": "assistant", "content": "Welcome. I am Freddy's AI Career Orchestrator. How can I demonstrate his value to your organization today?"}
+        {"role": "assistant", "content": "Hello! I can now search Freddy's resume using AI semantic matching. Ask me anything!"}
     ]
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-if prompt := st.chat_input("Ask about Freddy's expertise..."):
+# --- 4. Chat Input & Retrieval Logic ---
+if prompt := st.chat_input("Ask about Freddy's skills..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        with st.spinner("Analyzing resume archives..."):
-            try:
-                # 🟢 VECTOR SEARCH (Works on Oracle Free Tier)
-                retriever = v_store.as_retriever(search_kwargs={"k": 4})
+        # Define the Prompt Template
+        template = """
+        SYSTEM: Use the following context from Freddy's resume 
+        to answer the user's question. If the answer isn't in the context, be honest but 
+        highlight related strengths Freddy has.
+        
+        CONTEXT: {context}
+        QUESTION: {question}
+        
+        INSTRUCTIONS: Summarize Freddy's experience, specific technical skills, and key achievements.
+        """
+        prompt_template = PromptTemplate(template=template, input_variables=["context", "question"])
 
-                qa_chain = RetrievalQA.from_chain_type(
+        with st.spinner("Searching Freddy's experience..."):
+            try:
+                # 🟢 THE PURE VECTOR FALLBACK:
+                # Instead of the Hybrid Retriever (which failed on the index type),
+                # we use the vector store itself to find the most similar content.
+                retriever = v_store.as_retriever(search_kwargs={"k": 5})
+
+                chain = RetrievalQA.from_chain_type(
                     llm=llm,
                     chain_type="stuff",
                     retriever=retriever,
                     chain_type_kwargs={"prompt": prompt_template}
                 )
                 
-                response = qa_chain.invoke(prompt)
+                # Execute search and generation
+                response = chain.invoke(prompt)
                 full_response = response["result"]
                 
                 st.markdown(full_response)
@@ -104,3 +103,4 @@ if prompt := st.chat_input("Ask about Freddy's expertise..."):
                 
             except Exception as e:
                 st.error(f"Search Error: {e}")
+                st.info("Check if the table RESUME_SEARCH contains data and valid vectors.")
