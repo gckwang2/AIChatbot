@@ -72,18 +72,20 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
             """
             PROMPT = PromptTemplate(template=template, input_variables=["context", "question"])
             
-            try:
-                # We use double quotes inside the string to be ultra-explicit for Oracle
-                # This prevents the "DRG-10502: index does not exist" error
-                explicit_idx = '"ADMIN"."RES_IDX"' 
+          try:
+                # 1. Use the name in plain UPPERCASE without the schema or extra quotes
+                # Oracle will look in the logged-in user's schema (ADMIN) automatically.
+                index_to_use = "RES_IDX" 
             
                 retriever = OracleHybridSearchRetriever(
                     client=conn,
                     vector_store=v_store,
-                    idx_name=explicit_idx, 
+                    idx_name=index_to_use, 
                     search_mode="hybrid", 
                     k=5
                 )
+            
+                # 2. Re-initialize the chain
                 chain = RetrievalQA.from_chain_type(
                     llm=llm,
                     chain_type="stuff",
@@ -92,9 +94,8 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
                 )
                 
                 response = chain.invoke(prompt)
-                full_response = response["result"]
-                st.markdown(full_response)
-                st.session_state.messages.append({"role": "assistant", "content": full_response})
+                st.markdown(response["result"])
+                st.session_state.messages.append({"role": "assistant", "content": response["result"]})
                 
             except Exception as e:
                 st.error(f"Search Error: {e}")
