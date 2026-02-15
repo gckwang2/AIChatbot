@@ -76,21 +76,13 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        with st.spinner("Searching keywords and semantic context..."):
-            template = """
-            SYSTEM: Expert Career Coach. Use the provided context from Freddy's resume.
-            If the info is missing, mention related skills Freddy has.
-            
-            CONTEXT: {context}
-            QUESTION: {question}
-            
-            INSTRUCTIONS: Provide a professional summary, list matching skills, and highlight achievements.
-            """
-            PROMPT = PromptTemplate(template=template, input_variables=["context", "question"])
+       with st.spinner("Searching keywords and semantic context..."):
+            # Logic to handle potential schema issues
+            user_prefix = st.secrets["DB_USER"].upper()
             
             try:
-                # Use plain UPPERCASE. Oracle resolves this to ADMIN.RES_IDX automatically.
-                # Ensure you ran: EXEC CTX_DDL.SYNC_INDEX('RES_IDX'); in your SQL tool.
+                # We pass the index name in plain UPPERCASE. 
+                # If the plain name fails, the driver might need the owner prefix.
                 index_to_use = "RES_IDX" 
 
                 retriever = OracleHybridSearchRetriever(
@@ -100,6 +92,8 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
                     search_mode="hybrid", 
                     k=5
                 )
+
+                # Rest of your chain logic...
 
                 chain = RetrievalQA.from_chain_type(
                     llm=llm,
