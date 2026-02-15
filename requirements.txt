@@ -8,3 +8,4 @@ langchain-google-genai
 langchain-text-splitters
 langchain-classic
 python-dotenv
+langchain-oracledb>=1.2.0
