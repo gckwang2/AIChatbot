@@ -71,8 +71,7 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
 
         with st.spinner("Searching keywords and semantic context..."):
             try:
-                # 🛠️ Because of the PUBLIC SYNONYM we created as ADMIN, 
-                # CHATBOT_USER can now see 'RES_IDX' directly.
+                # Use the public synonym name
                 index_to_use = "RES_IDX" 
 
                 retriever = OracleHybridSearchRetriever(
@@ -83,6 +82,7 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
                     k=5
                 )
 
+                # Initialize your chain
                 chain = RetrievalQA.from_chain_type(
                     llm=llm,
                     chain_type="stuff",
@@ -95,6 +95,6 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
                 st.markdown(full_response)
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
                 
-              except Exception as e:
+            except Exception as e:
                 st.error(f"Search Error: {e}")
-                st.info("Ensure ADMIN ran: CREATE PUBLIC SYNONYM RES_IDX FOR ADMIN.RES_IDX;")
+                st.info("Check if the PUBLIC SYNONYM exists in the DB.")
