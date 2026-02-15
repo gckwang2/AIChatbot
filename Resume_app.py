@@ -1,17 +1,53 @@
 import streamlit as st
 import oracledb
-from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
-from langchain_oracledb import OracleVS
-from langchain_core.prompts import PromptTemplate
-from langchain_classic.chains import RetrievalQA
+import asyncio
+from putergenai import PuterClient
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_community.vectorstores import OracleVS
 
-# --- 1. Page Config ---
+# --- UPDATED IMPORTS FOR 2026 ---
+# Using langchain_classic to support the RetrievalQA chain you provided
+from langchain_core.prompts import PromptTemplate
+from langchain_core.language_models.llms import LLM
+from typing import Any, List, Optional
+
+try:
+    from langchain_classic.chains import RetrievalQA
+except ImportError:
+    from langchain.chains import RetrievalQA
+
+# --- 1. Custom Puter LLM Wrapper ---
+class PuterLLM(LLM):
+    model_name: str = "gpt-4o" 
+
+    @property
+    def _llm_type(self) -> str:
+        return "puter"
+
+    def _call(self, prompt: str, stop: Optional[List[str]] = None) -> str:
+        async def fetch_response():
+            async with PuterClient() as client:
+                # Login using Streamlit Secrets
+                await client.login(st.secrets["PUTER_USER"], st.secrets["PUTER_PASS"])
+                
+                result = await client.ai_chat(
+                    prompt=prompt, 
+                    options={"model": self.model_name}
+                )
+                
+                # Robust response parsing for 2026 Puter SDK
+                try:
+                    if isinstance(result, dict) and "response" in result:
+                        return result["response"]["result"]["message"]["content"]
+                    return str(result)
+                except Exception:
+                    return "Error: Could not parse response from Puter AI."
+
+        return asyncio.run(fetch_response())
+
+# --- 2. Database & App Initialization ---
 st.set_page_config(page_title="Freddy Goh's AI Skills", layout="centered")
 
-st.title("🤖 Freddy's AI Career Assistant")
-st.caption("AI enable search powered by Oracle keyword+vector, RAG, Google embedding, Gemini flash 3.0 LLM ")
-
-# --- 2. Connections ---
 @st.cache_resource
 def get_db_connection():
     return oracledb.connect(
@@ -23,21 +59,19 @@ def get_db_connection():
 def init_connections():
     try:
         conn = get_db_connection()
+        # Verify connection
         conn.ping()
         
-        # Embeddings Model
+        # Embeddings Model (Google)
         embeddings = GoogleGenerativeAIEmbeddings(
             model="models/gemini-embedding-001", 
             google_api_key=st.secrets["GOOGLE_API_KEY"]
         )
         
-        # Chat Model
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-3-flash-preview", 
-            google_api_key=st.secrets["GOOGLE_API_KEY"]
-        )
+        # LLM (Puter.js / GPT-4o)
+        llm = PuterLLM()
         
-        # Vector Store (The Fallback Engine)
+        # Vector Store (Oracle)
         v_store = OracleVS(
             client=conn,
             table_name="RESUME_SEARCH", 
@@ -67,7 +101,7 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        # Define the Prompt Template
+        # INCORPORATED: Your specific Prompt Template
         template = """
         SYSTEM: Use the following context from Freddy's resume 
         to answer the user's question. If the answer isn't in the context, be honest but 
@@ -82,11 +116,10 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
 
         with st.spinner("Searching Freddy's experience..."):
             try:
-                # 🟢 THE PURE VECTOR FALLBACK:
-                # Instead of the Hybrid Retriever (which failed on the index type),
-                # we use the vector store itself to find the most similar content.
+                # 🟢 THE PURE VECTOR FALLBACK logic you requested:
                 retriever = v_store.as_retriever(search_kwargs={"k": 5})
 
+                # Using RetrievalQA as per your working logic
                 chain = RetrievalQA.from_chain_type(
                     llm=llm,
                     chain_type="stuff",
@@ -95,7 +128,8 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
                 )
                 
                 # Execute search and generation
-                response = chain.invoke(prompt)
+                # In 2026 RetrievalQA, we pass the query via invoke
+                response = chain.invoke({"query": prompt})
                 full_response = response["result"]
                 
                 st.markdown(full_response)
