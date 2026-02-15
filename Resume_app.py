@@ -92,12 +92,12 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
             try:
                 # Both objects are now in the same namespace, satisfying Pydantic
                 retriever = OracleHybridSearchRetriever(
-                    client=conn,
-                    vector_store=v_store,
-                    idx_name="RES_IDX",
-                    search_mode="hybrid", 
-                    k=5
-                )
+                client=conn,
+                vector_store=v_store,
+                idx_name="RES_IDX", # Standard Oracle stores index names in UPPERCASE
+                search_mode="hybrid", 
+                k=5
+            )
 
                 chain = RetrievalQA.from_chain_type(
                     llm=llm,
