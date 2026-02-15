@@ -68,15 +68,13 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
 
         with st.spinner("Searching keywords and semantic context..."):
             try:
-                # 🛠️ THE FIX: Explicitly qualify the index with the Schema Owner
-                # Oracle metadata is case-sensitive; st.secrets usually returns lowercase
-                schema_owner = st.secrets["DB_USER"].upper()
-                qualified_idx = f"{schema_owner}.RES_IDX"
+                # We hardcode 'ADMIN' here because that is where the index lives
+                qualified_idx = "ADMIN.RES_IDX"
 
                 retriever = OracleHybridSearchRetriever(
                     client=conn,
                     vector_store=v_store,
-                    idx_name=qualified_idx, # Now looks like "ADMIN.RES_IDX"
+                    idx_name=qualified_idx, 
                     search_mode="hybrid", 
                     k=5
                 )
@@ -89,10 +87,8 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
                 )
                 
                 response = chain.invoke(prompt)
-                full_response = response["result"]
-                st.markdown(full_response)
-                st.session_state.messages.append({"role": "assistant", "content": full_response})
+                st.markdown(response["result"])
+                st.session_state.messages.append({"role": "assistant", "content": response["result"]})
                 
             except Exception as e:
                 st.error(f"Search Error: {e}")
-                st.info("Try clicking 'Clear Cache' in the top-right Streamlit menu to refresh the DB connection.")
