@@ -6,10 +6,11 @@ from langchain_core.prompts import PromptTemplate
 from langchain_classic.chains import RetrievalQA
 
 # --- 1. Page Config ---
+# --- 1. Page Config ---
 st.set_page_config(page_title="Freddy Goh's AI Skills", layout="centered")
 
 st.title("🤖 Freddy's AI Career Assistant")
-st.caption("Pure Keyword + Vector Fallback Mode Active")
+st.caption("AI enable search powered by Oracle keyword+vector, RAG, Google embedding, Gemini flash 3.0 LLM ")
 
 # --- 2. Connections ---
 @st.cache_resource
