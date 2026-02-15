@@ -1,7 +1,7 @@
 import streamlit as st
 import oracledb
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
-# Correct unified imports
+# Correct unified imports from the native partner package
 from langchain_oracledb import OracleVS, OracleHybridSearchRetriever
 from langchain_core.prompts import PromptTemplate
 from langchain_classic.chains import RetrievalQA
@@ -9,7 +9,7 @@ from langchain_classic.chains import RetrievalQA
 # --- 1. Page Config ---
 st.set_page_config(page_title="Freddy Goh's AI Skills", layout="centered")
 
-# --- 2. Connections ---
+# --- 2. Connections with Auto-Reconnect ---
 @st.cache_resource
 def get_db_connection():
     return oracledb.connect(
@@ -21,7 +21,7 @@ def get_db_connection():
 def init_connections():
     try:
         conn = get_db_connection()
-        conn.ping()
+        conn.ping() # Heartbeat check
         
         embeddings = GoogleGenerativeAIEmbeddings(
             model="models/gemini-embedding-001", 
@@ -33,6 +33,7 @@ def init_connections():
             google_api_key=st.secrets["GOOGLE_API_KEY"]
         )
         
+        # Native OracleVS instance
         v_store = OracleVS(
             client=conn,
             table_name="RESUME_SEARCH",
@@ -45,14 +46,17 @@ def init_connections():
 
 v_store, llm, conn, embeddings = init_connections()
 
-# --- 3. Chat Logic ---
+# --- 3. Chat Session State ---
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Hello! Hybrid Search is now live. Ask me anything about Freddy's experience."}]
+    st.session_state.messages = [
+        {"role": "assistant", "content": "Hello! Hybrid Search is now live. Ask me about Freddy's experience."}
+    ]
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
+# --- 4. Chat Input & Hybrid Logic ---
 if prompt := st.chat_input("Ask about Freddy's skills..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
@@ -69,7 +73,7 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
             PROMPT = PromptTemplate(template=template, input_variables=["context", "question"])
             
             try:
-                # The 'RES_IDX' must be exactly as it appears in the DB (UPPERCASE)
+                # The 'idx_name' MUST be UPPERCASE to match Oracle's metadata
                 retriever = OracleHybridSearchRetriever(
                     client=conn,
                     vector_store=v_store,
@@ -86,8 +90,9 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
                 )
                 
                 response = chain.invoke(prompt)
-                st.markdown(response["result"])
-                st.session_state.messages.append({"role": "assistant", "content": response["result"]})
+                full_response = response["result"]
+                st.markdown(full_response)
+                st.session_state.messages.append({"role": "assistant", "content": full_response})
                 
             except Exception as e:
                 st.error(f"Search Error: {e}")
