@@ -77,23 +77,18 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    with st.chat_message("assistant"):
-        with st.spinner("Analyzing resume with Hybrid Search (Keywords + AI)..."):
-            template = """
-            SYSTEM: Expert Career Coach. Use the provided context from Freddy's resume.
-            If the info is missing, mention related skills Freddy has.
+   # --- UPDATED RETRIEVER LOGIC (Fixed for Pydantic) ---
+with st.chat_message("assistant"):
+    with st.spinner("Analyzing resume with Hybrid Search..."):
+        # ... (Keep prompt template as is) ...
+        
+        try:
+            # Re-establishing the raw connection object to satisfy Pydantic
+            raw_conn = get_db_connection() 
             
-            CONTEXT: {context}
-            QUESTION: {question}
-            
-            INSTRUCTIONS: Provide a professional summary, list matching skills, and highlight achievements.
-            """
-            PROMPT = PromptTemplate(template=template, input_variables=["context", "question"])
-            
-            # --- HYBRID RETRIEVER ---
-            # This uses the 'RES_IDX' you just created in SQL
+            # Initialize retriever
             retriever = OracleHybridSearchRetriever(
-                client=conn,
+                client=raw_conn, # Use the raw connection directly
                 table_name="RESUME_SEARCH",
                 embeddings=embeddings,
                 search_mode="hybrid", 
@@ -107,11 +102,10 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
                 chain_type_kwargs={"prompt": PROMPT}
             )
             
-            try:
-                response = chain.invoke(prompt)
-                full_response = response["result"]
-                st.markdown(full_response)
-                st.session_state.messages.append({"role": "assistant", "content": full_response})
-            except Exception as e:
-                st.error(f"An error occurred: {e}")
-                st.info("If this is a timeout, try a shorter question.")
+            response = chain.invoke(prompt)
+            full_response = response["result"]
+            st.markdown(full_response)
+            st.session_state.messages.append({"role": "assistant", "content": full_response})
+            
+        except Exception as e:
+            st.error(f"Search Error: {e}")
