@@ -73,17 +73,14 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
             PROMPT = PromptTemplate(template=template, input_variables=["context", "question"])
             
             try:
-                # 1. Get your username from secrets (it must be uppercase for Oracle metadata)
-                db_user = st.secrets["DB_USER"].upper()
-                
-                # 2. Add the schema prefix to the index name
-                # Format should be: "USERNAME"."INDEX_NAME"
-                qualified_index_name = f'"{db_user}"."RES_IDX"'
+                # We use double quotes inside the string to be ultra-explicit for Oracle
+                # This prevents the "DRG-10502: index does not exist" error
+                explicit_idx = '"ADMIN"."RES_IDX"' 
             
                 retriever = OracleHybridSearchRetriever(
                     client=conn,
                     vector_store=v_store,
-                    idx_name=qualified_index_name, # Use the qualified name
+                    idx_name=explicit_idx, 
                     search_mode="hybrid", 
                     k=5
                 )
