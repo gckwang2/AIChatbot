@@ -96,4 +96,11 @@ if prompt := st.chat_input("Ask about Freddy's expertise..."):
                     chain_type_kwargs={"prompt": prompt_template}
                 )
                 
-                response = qa
+                response = qa_chain.invoke(prompt)
+                full_response = response["result"]
+                
+                st.markdown(full_response)
+                st.session_state.messages.append({"role": "assistant", "content": full_response})
+                
+            except Exception as e:
+                st.error(f"Search Error: {e}")
