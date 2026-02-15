@@ -2,14 +2,24 @@ import streamlit as st
 import oracledb
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_community.vectorstores import OracleVS
-# --- NEW IMPORT ---
 from langchain_community.retrievers import OracleHybridSearchRetriever
 from langchain_core.prompts import PromptTemplate
 from langchain_classic.chains import RetrievalQA
 
-# ... (Keep your Page Config and CSS the same) ...
+# --- 1. Page Config & Styling ---
+st.set_page_config(page_title="Freddy Goh's AI Skills", layout="centered")
 
-# --- 2. Connections with Auto-Reconnect ---
+st.markdown("""
+    <style>
+    .stApp { max-width: 800px; margin: 0 auto; }
+    .stChatMessage { background-color: transparent !important; }
+    </style>
+    """, unsafe_allow_html=True)
+
+st.title("🤖 Freddy Goh's AI Skills Tool")
+st.caption("Powered by Oracle 23ai Hybrid Search & Gemini 3 Flash")
+
+# --- 2. Connections with Health Check ---
 @st.cache_resource
 def get_db_connection():
     return oracledb.connect(
@@ -21,6 +31,7 @@ def get_db_connection():
 def init_connections():
     try:
         conn = get_db_connection()
+        # Connection Heartbeat
         try:
             conn.ping()
         except oracledb.Error:
@@ -37,29 +48,37 @@ def init_connections():
             google_api_key=st.secrets["GOOGLE_API_KEY"]
         )
         
-        # We still need the v_store for the retriever to reference
+        # v_store remains for potential metadata filtering or direct vector ops
         v_store = OracleVS(
             client=conn,
             table_name="RESUME_SEARCH",
             embedding_function=embeddings
         )
-        return v_store, llm, conn # Return conn for the hybrid retriever
+        return v_store, llm, conn, embeddings
     except Exception as e:
         st.error(f"❌ Connection Failed: {e}")
         st.stop()
 
-vector_store, llm, conn = init_connections()
+v_store, llm, conn, embeddings = init_connections()
 
-# ... (Keep Session State and History display the same) ...
+# --- 3. Chat Session State ---
+if "messages" not in st.session_state:
+    st.session_state.messages = [
+        {"role": "assistant", "content": "Hello! I'm Freddy's AI assistant. I now use Hybrid Search to find exact skills and experience. How can I help?"}
+    ]
 
-# --- 4. Chat Input ---
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+# --- 4. Chat Input & Hybrid Search Logic ---
 if prompt := st.chat_input("Ask about Freddy's skills..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        with st.spinner("Searching Freddy's resume using Hybrid Search..."):
+        with st.spinner("Analyzing resume with Hybrid Search (Keywords + AI)..."):
             template = """
             SYSTEM: Expert Career Coach. Use the provided context from Freddy's resume.
             If the info is missing, mention related skills Freddy has.
@@ -71,13 +90,13 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
             """
             PROMPT = PromptTemplate(template=template, input_variables=["context", "question"])
             
-            # --- UPDATED RETRIEVER LOGIC ---
-            # Hybrid search finds both exact keywords AND similar meanings
+            # --- HYBRID RETRIEVER ---
+            # This uses the 'RES_IDX' you just created in SQL
             retriever = OracleHybridSearchRetriever(
                 client=conn,
                 table_name="RESUME_SEARCH",
                 embeddings=embeddings,
-                search_mode="hybrid", # Options: "hybrid", "keyword", or "semantic"
+                search_mode="hybrid", 
                 k=5
             )
 
@@ -95,3 +114,4 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
             except Exception as e:
                 st.error(f"An error occurred: {e}")
+                st.info("If this is a timeout, try a shorter question.")
