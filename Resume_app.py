@@ -78,19 +78,26 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
         st.markdown(prompt)
 
    # --- UPDATED RETRIEVER LOGIC (Fixed for Pydantic) ---
+# --- UPDATED HYBRID SEARCH BLOCK ---
 with st.chat_message("assistant"):
-    with st.spinner("Analyzing resume with Hybrid Search..."):
-        # ... (Keep prompt template as is) ...
+    with st.spinner("Analyzing resume with Hybrid Search (Keywords + AI)..."):
+        template = """
+        SYSTEM: Expert Career Coach. Use the provided context from Freddy's resume.
+        If the info is missing, mention related skills Freddy has.
+        
+        CONTEXT: {context}
+        QUESTION: {question}
+        
+        INSTRUCTIONS: Provide a professional summary, list matching skills, and highlight achievements.
+        """
+        PROMPT = PromptTemplate(template=template, input_variables=["context", "question"])
         
         try:
-            # Re-establishing the raw connection object to satisfy Pydantic
-            raw_conn = get_db_connection() 
-            
-            # Initialize retriever
+            # We must pass the actual v_store object and the index name we created (res_idx)
             retriever = OracleHybridSearchRetriever(
-                client=raw_conn, # Use the raw connection directly
-                table_name="RESUME_SEARCH",
-                embeddings=embeddings,
+                client=conn,
+                vector_store=v_store,  # <--- REQUIRED FIELD 1
+                idx_name="RES_IDX",    # <--- REQUIRED FIELD 2 (Matches your SQL)
                 search_mode="hybrid", 
                 k=5
             )
@@ -109,3 +116,5 @@ with st.chat_message("assistant"):
             
         except Exception as e:
             st.error(f"Search Error: {e}")
+            # Debug info if needed
+            st.write("Ensure your index is named 'RES_IDX' in the database.")
