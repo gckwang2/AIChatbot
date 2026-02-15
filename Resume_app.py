@@ -111,4 +111,8 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
                 response = chain.invoke(prompt)
                 full_response = response["result"]
                 st.markdown(full_response)
-                st.session
+                st.session_state.messages.append({"role": "assistant", "content": full_response})
+                
+            except Exception as e:
+                st.error(f"Search Error: {e}")
+                st.info("Check if RES_IDX exists in the DB with: SELECT index_name FROM user_indexes;")
