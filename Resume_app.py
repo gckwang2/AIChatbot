@@ -3,12 +3,15 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGener
 from langchain_milvus import Milvus
 
 # --- 1. Page Config ---
-st.set_page_config(page_title="Freddy's Career Advocate", layout="centered")
+st.set_page_config(page_title="Freddy's AI ChatBot", layout="centered")
+
+st.title("🚀 Freddy's AI Skill Search")
+st.caption("Custom Reasoning RAG | Zilliz Cloud | Gemini 3.0 Flash Preview")
 
 # --- 2. Initialization ---
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        {"role": "assistant", "content": "I am Freddy's Career Advocate. I'm ready to highlight his expertise for you!"}
+        {"role": "assistant", "content": "I am Freddy's assistance. I'm ready to highlight his expertise for you!"}
     ]
 
 # --- 3. Connections ---
@@ -96,7 +99,9 @@ if prompt := st.chat_input("Ask about Freddy's potential..."):
 
                 # STEP C: Career Advocate Reasoning
                 advocate_prompt = f"""
-                ROLE: Freddy Goh's Career Advocate.
+                ROLE: You are Freddy Goh's "Career Advocate." 
+                INSTRUCTION: Analyze the resume context. Look for transferable skills and logical overlaps. 
+                If a skill isn't explicitly listed, infer the related skills found in the resume,and use his previous experience based on his senior level. Do not return "Career Advocate" in the return response.
                 CONTEXT: {context_text}
                 QUESTION: {prompt}
                 INSTRUCTION: Identify logical strengths and transferable skills. Be persuasive and professional.
