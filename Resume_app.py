@@ -54,48 +54,63 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
 
 # --- 4. Custom RAG Logic (Avoids langchain.chains) ---
+# ... (Keep your previous imports and init_connections) ...
+
 if prompt := st.chat_input("Ask about Freddy's potential..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        # The Career Advocate Prompt
-        template = """
-        ROLE: You are Freddy Goh's "Career Advocate." 
-        INSTRUCTION: Analyze the resume context. Look for transferable skills and logical overlaps. 
-        If a skill isn't explicitly listed, infer the related skills found in the resume,and use his previous experience based on his senior level. Do not return "Career Advocate" in the return response.
+        # --- NEW: QUERY EXPANSION STEP ---
+        expansion_prompt = f"""
+        You are an AI search optimizer. Generate 3 different versions of the following 
+        user question to improve semantic search retrieval in a resume database. 
+        Focus on technical synonyms and related job titles.
         
-        CONTEXT: {context}
+        Original Question: {prompt}
         
-        QUESTION: {question}
-        
-        Skills RESPONSE:
+        Output only the 3 queries, one per line, no numbering.
         """
-        prompt_template = ChatPromptTemplate.from_template(template)
+        
+        with st.spinner("Expanding search intent..."):
+            # Generate 3 variations using Gemini
+            expansion_response = llm.invoke(expansion_prompt)
+            # Split into a list of queries
+            queries = expansion_response.content.strip().split("\n")
+            # Add the original prompt to the list
+            all_queries = [prompt] + queries[:3] 
 
-        with st.spinner("Searching for Freddy skills..."):
+        # --- RETRIEVAL STEP ---
+        with st.spinner(f"Searching Milvus with {len(all_queries)} perspectives..."):
             try:
-                # 1. Get relevant documents (k=15)
-                retriever = v_store.as_retriever(search_kwargs={"k": 15})
-                docs = retriever.invoke(prompt)
+                retriever = v_store.as_retriever(search_kwargs={"k": 5})
+                all_docs = []
                 
-                # 2. Prepare context string
-                context_text = "\n\n".join([doc.page_content for doc in docs])
+                # Search Milvus for each variation
+                for q in all_queries:
+                    docs = retriever.invoke(q)
+                    all_docs.extend(docs)
                 
-                # 3. Create a manual chain using LCEL (No imports from langchain.chains needed!)
-                chain = (
-                    {"context": lambda x: context_text, "question": RunnablePassthrough()}
-                    | prompt_template
-                    | llm
-                    | StrOutputParser()
-                )
+                # Deduplicate documents based on content
+                unique_docs = {doc.page_content: doc for doc in all_docs}.values()
+                context_text = "\n\n".join([doc.page_content for doc in unique_docs])
+
+                # --- GENERATION STEP (Career Advocate) ---
+                advocate_template = """
+                ROLE: Freddy Goh's Career Advocate.
+                CONTEXT: {context}
+                QUESTION: {question}
+                INSTRUCTION: Use the context to build a persuasive case for Freddy.
+                """
                 
-                # 4. Generate response
-                full_response = chain.invoke(prompt)
+                final_prompt = advocate_template.format(context=context_text, question=prompt)
+                response = llm.invoke(final_prompt)
                 
-                st.markdown(full_response)
-                st.session_state.messages.append({"role": "assistant", "content": full_response})
+                st.markdown(response.content)
+                st.session_state.messages.append({"role": "assistant", "content": response.content})
                 
+            except Exception as e:
+                st.error(f"Expansion Error: {e}")
             except Exception as e:
                 st.error(f"Reasoning Error: {e}")
