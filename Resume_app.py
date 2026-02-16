@@ -3,12 +3,14 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGener
 from langchain_milvus import Milvus
 
 # --- 1. Page Config ---
-st.set_page_config(page_title="Freddy's Agentic Advocate", layout="centered")
+st.set_page_config(page_title="Freddy's skills finder powered by AI", layout="centered")
+st.title("🚀 Freddy's Skill Search powered by AI")
+st.caption("Agentic RAG | Zilliz Cloud | Gemini 3.0 Flash Preview")
 
 # --- 2. Initialization ---
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        {"role": "assistant", "content": "I am Freddy's Agentic Career Advocate. I've analyzed his 23+ years of experience. How can I help you today?"}
+        {"role": "assistant", "content": "I am Freddy's Assistant. I've analyzed his 20+ years of experience. How can I help you today?"}
     ]
 
 # --- 3. Connections ---
@@ -92,13 +94,16 @@ if prompt := st.chat_input("Ask about Freddy's potential..."):
         context_str = "\n\n".join(list(set(accumulated_context)))
         
         final_agent_prompt = f"""
-        ROLE: Freddy Goh's Senior Career Advocate.
+                ROLE: You are Freddy Goh's "Career Advocate." 
+                INSTRUCTION: Analyze the resume context. Look for transferable skills and logical overlaps. 
+               
         CONTEXT: {context_str}
         USER QUESTION: {prompt}
         
         TASK:
         Use the context to provide a professional, persuasive response. 
         Focus on metrics, seniority (23+ years), and leadership. 
+        If a skill isn't explicitly listed, infer the related skills found in the resume,and use his previous experience based on his senior level. Do not return "Career Advocate" in the return response.
         Do not show any metadata, JSON, or technical signatures.
         """
 
