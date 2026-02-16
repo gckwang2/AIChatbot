@@ -8,7 +8,7 @@ from langchain_core.output_parsers import StrOutputParser
 # --- 1. Page Config ---
 st.set_page_config(page_title="Freddy's Career Advocate", layout="centered")
 
-st.title("🚀 Freddy's AI Career Advocate")
+st.title("🚀 Freddy's AI Skill seatch")
 st.caption("Custom Reasoning RAG | Zilliz Cloud | Gemini 3.0 Flash Preview")
 
 # --- 2. Connections ---
@@ -46,7 +46,7 @@ v_store, llm = init_connections()
 # --- 3. Chat Session State ---
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        {"role": "assistant", "content": "I am Freddy's Career Advocate. I'm ready to highlight his expertise for you!"}
+        {"role": "assistant", "content": "I am Freddy's AI skill search. I'm ready to highlight his expertise for you!"}
     ]
 
 for message in st.session_state.messages:
@@ -64,17 +64,17 @@ if prompt := st.chat_input("Ask about Freddy's potential..."):
         template = """
         ROLE: You are Freddy Goh's "Career Advocate." 
         INSTRUCTION: Analyze the resume context. Look for transferable skills and logical overlaps. 
-        If a skill isn't explicitly listed, infer capability based on his senior level.
+        If a skill isn't explicitly listed, infer capability based on his senior level. Do not return "Career Advocate" in the return response.
         
         CONTEXT: {context}
         
         QUESTION: {question}
         
-        ADVOCATE RESPONSE:
+        Skills RESPONSE:
         """
         prompt_template = ChatPromptTemplate.from_template(template)
 
-        with st.spinner("Advocating for Freddy..."):
+        with st.spinner("Searching for Freddy skills..."):
             try:
                 # 1. Get relevant documents (k=15)
                 retriever = v_store.as_retriever(search_kwargs={"k": 15})
