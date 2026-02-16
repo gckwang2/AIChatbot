@@ -8,7 +8,7 @@ st.set_page_config(page_title="Freddy's Career Advocate", layout="centered")
 # --- 2. Initialization ---
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        {"role": "assistant", "content": "I am Freddy's Career Advocate. Ask me about his AI expertise!"}
+        {"role": "assistant", "content": "I am Freddy's Career Advocate. I'm ready to highlight his expertise for you!"}
     ]
 
 # --- 3. Connections ---
@@ -40,30 +40,52 @@ def init_connections():
 
 v_store, llm = init_connections()
 
-# --- 4. Display Chat History ---
+# --- 4. Helper for Deep Content Extraction ---
+def get_clean_text(response):
+    """Recursively extracts text from Gemini's complex response objects."""
+    # If it's the standard LangChain Message
+    if hasattr(response, 'content'):
+        response = response.content
+    
+    # If it's a list (like the one that caused your error)
+    if isinstance(response, list):
+        # Look for the 'text' key inside the first dictionary
+        if len(response) > 0 and isinstance(response[0], dict):
+            return str(response[0].get('text', str(response[0])))
+        return " ".join([get_clean_text(i) for i in response])
+    
+    # If it's a dictionary
+    if isinstance(response, dict):
+        return str(response.get('text', str(response)))
+        
+    return str(response)
+
+# --- 5. Display Chat History ---
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# --- 5. Chat Input & Advocate Logic ---
+# --- 6. Chat Input & Advocate Logic ---
 if prompt := st.chat_input("Ask about Freddy's potential..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        # STEP A: Query Expansion for Widening Search
-        expansion_prompt = f"Provide 3 search variations for: {prompt}. Output queries only, one per line."
+        # STEP A: Query Expansion
+        expansion_prompt = f"Provide 3 search variations for: {prompt}. Output only the queries, one per line."
         
-        with st.spinner("Widening search..."):
+        with st.spinner("Widening search scope..."):
             exp_res = llm.invoke(expansion_prompt)
-            # FORCE STRING EXTRACTION
-            exp_text = exp_res.content if hasattr(exp_res, 'content') else str(exp_res)
-            queries = [q.strip() for q in exp_text.split("\n") if q.strip()][:3]
+            # Use the deep cleaner to ensure we have a string
+            exp_text = get_clean_text(exp_res)
+            
+            # Safe to split now
+            queries = [q.strip() for q in exp_text.strip().split("\n") if q.strip()][:3]
             all_queries = [prompt] + queries
 
         # STEP B: Multi-Query Retrieval
-        with st.spinner("Analyzing data..."):
+        with st.spinner("Consulting Freddy's Resume via Zilliz..."):
             try:
                 retriever = v_store.as_retriever(search_kwargs={"k": 5})
                 all_docs = []
@@ -77,21 +99,14 @@ if prompt := st.chat_input("Ask about Freddy's potential..."):
                 ROLE: Freddy Goh's Career Advocate.
                 CONTEXT: {context_text}
                 QUESTION: {prompt}
-                INSTRUCTION: Summarize Freddy's strengths based on the context. 
-                Keep it professional and readable. No raw code or metadata.
+                INSTRUCTION: Identify logical strengths and transferable skills. Be persuasive and professional.
                 """
                 
                 final_res = llm.invoke(advocate_prompt)
+                answer = get_clean_text(final_res)
                 
-                # 🟢 CRITICAL FIX: Extract only the text answer
-                answer = final_res.content if hasattr(final_res, 'content') else str(final_res)
-                
-                # Ensure we don't display the dictionary/metadata
-                if isinstance(answer, str):
-                    st.markdown(answer)
-                    st.session_state.messages.append({"role": "assistant", "content": answer})
-                else:
-                    st.error("Failed to parse AI response.")
+                st.markdown(answer)
+                st.session_state.messages.append({"role": "assistant", "content": answer})
                 
             except Exception as e:
                 st.error(f"Reasoning Error: {e}")
