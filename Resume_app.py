@@ -63,6 +63,7 @@ if prompt := st.chat_input("Ask about Freddy's potential..."):
 
     with st.chat_message("assistant"):
         # --- NEW: QUERY EXPANSION STEP ---
+       # --- 1. QUERY EXPANSION STEP (Robust Version) ---
         expansion_prompt = f"""
         You are an AI search optimizer. Generate 3 different versions of the following 
         user question to improve semantic search retrieval in a resume database. 
@@ -70,47 +71,55 @@ if prompt := st.chat_input("Ask about Freddy's potential..."):
         
         Original Question: {prompt}
         
-        Output only the 3 queries, one per line, no numbering.
+        Output only the 3 queries, one per line, no numbering or extra text.
         """
         
         with st.spinner("Expanding search intent..."):
-            # Generate 3 variations using Gemini
             expansion_response = llm.invoke(expansion_prompt)
-            # Split into a list of queries
-            queries = expansion_response.content.strip().split("\n")
-            # Add the original prompt to the list
+            
+            # 🟢 Robustly extract content from the AIMessage object
+            if hasattr(expansion_response, 'content'):
+                expansion_text = expansion_response.content
+            else:
+                expansion_text = str(expansion_response)
+
+            # Clean and split into a list
+            queries = [q.strip() for q in expansion_text.strip().split("\n") if q.strip()]
             all_queries = [prompt] + queries[:3] 
 
-        # --- RETRIEVAL STEP ---
+        # --- 2. MULTI-QUERY RETRIEVAL ---
         with st.spinner(f"Searching Milvus with {len(all_queries)} perspectives..."):
             try:
                 retriever = v_store.as_retriever(search_kwargs={"k": 5})
                 all_docs = []
                 
-                # Search Milvus for each variation
                 for q in all_queries:
                     docs = retriever.invoke(q)
                     all_docs.extend(docs)
                 
-                # Deduplicate documents based on content
+                # Deduplicate based on content
                 unique_docs = {doc.page_content: doc for doc in all_docs}.values()
                 context_text = "\n\n".join([doc.page_content for doc in unique_docs])
 
-                # --- GENERATION STEP (Career Advocate) ---
+                # --- 3. CAREER ADVOCATE GENERATION ---
                 advocate_template = """
-                ROLE: Freddy Goh's Career Advocate.
+                ROLE: You are Freddy Goh's Career Advocate.
+                
+                INSTRUCTION: 
+                Use the following context to answer the question. 
+                Identify logical overlaps and transferable skills. 
+                Represent Freddy's potential persuasively.
+
                 CONTEXT: {context}
                 QUESTION: {question}
-                INSTRUCTION: Use the context to build a persuasive case for Freddy.
                 """
                 
-                final_prompt = advocate_template.format(context=context_text, question=prompt)
-                response = llm.invoke(final_prompt)
+                # Use string formatting to avoid LCEL import issues
+                final_input = advocate_template.format(context=context_text, question=prompt)
+                final_response = llm.invoke(final_input)
                 
-                st.markdown(response.content)
-                st.session_state.messages.append({"role": "assistant", "content": response.content})
+                st.markdown(final_response.content)
+                st.session_state.messages.append({"role": "assistant", "content": final_response.content})
                 
             except Exception as e:
-                st.error(f"Expansion Error: {e}")
-            except Exception as e:
-                st.error(f"Reasoning Error: {e}")
+                st.error(f"Search/Advocacy Error: {e}")
