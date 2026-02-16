@@ -1,108 +1,128 @@
 import streamlit as st
 import oracledb
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
-from langchain_oracledb import OracleVS
-from langchain_core.prompts import PromptTemplate
+from langchain_groq import ChatGroq
+from langchain_openai import ChatOpenAI
+from langchain_oracledb import OracleVS 
 from langchain_classic.chains import RetrievalQA
+from langchain_core.prompts import PromptTemplate
 
-# --- 1. Page Config ---
-# --- 1. Page Config ---
+# --- 1. Sidebar & Callback Logic ---
 st.set_page_config(page_title="Freddy Goh's AI Skills", layout="centered")
 
-st.title("🤖 Freddy's AI Career Assistant")
-st.caption("AI enable search powered by Oracle keyword+vector, RAG, Google embedding, Gemini flash 3.0 LLM ")
+def update_greeting():
+    new_model = st.session_state.model_selector
+    greeting = f"I am now using {new_model}. How can I help?"
+    if "messages" in st.session_state:
+        st.session_state.messages[0] = {"role": "assistant", "content": greeting}
+    else:
+        st.session_state.messages = [{"role": "assistant", "content": greeting}]
 
-# --- 2. Connections ---
-@st.cache_resource
-def get_db_connection():
-    return oracledb.connect(
-        user=st.secrets["DB_USER"],
-        password=st.secrets["DB_PASSWORD"],
-        dsn=st.secrets["DB_DSN"],
-        disable_oob=True # Crucial for stable TLS/Cloud connections
+st.title("🤖 Freddy's AI Career Assistant")
+st.caption("2026 Search: Oracle 23ai TLS + HNSW Indexing + Optimized Connection")
+
+with st.sidebar:
+    st.header("Engine Settings")
+    model_choice = st.selectbox(
+        "Select AI Engine:",
+        options=[
+            "Gemini 3 Flash (Direct Google)", 
+            "Gemini 2.5 Pro (Direct Google)", 
+            "Qwen 3 Max (Direct Alibaba)",
+            "Groq Compound (Router Model)",
+            "GPT-OSS-120B (Direct Groq)",
+            "Llama 3.3 70B (Direct Groq)", 
+            "Llama 3.3 70B (OpenRouter Free)"
+        ],
+        index=0,
+        key="model_selector",
+        on_change=update_greeting
     )
 
-def init_connections():
+# --- 2. Connection Logic (Optimized for 2026 Cloud) ---
+@st.cache_resource
+def init_connections(engine_choice):
     try:
-        conn = get_db_connection()
-        conn.ping()
+        # UPDATED: Added disable_oob=True for stable Cloud/TLS/Docker connectivity
+        conn = oracledb.connect(
+            user=st.secrets["DB_USER"],
+            password=st.secrets["DB_PASSWORD"],
+            dsn=st.secrets["DB_DSN"],
+            disable_oob=True
+        )
         
-        # Embeddings Model
         embeddings = GoogleGenerativeAIEmbeddings(
             model="models/gemini-embedding-001", 
             google_api_key=st.secrets["GOOGLE_API_KEY"]
         )
         
-        # Chat Model
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-3-flash-preview", 
-            google_api_key=st.secrets["GOOGLE_API_KEY"]
-        )
-        
-        # Vector Store (The Fallback Engine)
-        v_store = OracleVS(
-            client=conn,
-            table_name="RESUME_SEARCH", 
-            embedding_function=embeddings
-        )
-        return v_store, llm, conn
+        # LLM Logic Mapping
+        if engine_choice == "Gemini 3 Flash (Direct Google)":
+            llm = ChatGoogleGenerativeAI(model="gemini-3-flash-preview", google_api_key=st.secrets["GOOGLE_API_KEY"])
+        elif engine_choice == "Gemini 2.5 Pro (Direct Google)":
+            llm = ChatGoogleGenerativeAI(model="gemini-2.5-pro", google_api_key=st.secrets["GOOGLE_API_KEY"], thinking_budget=1024)
+        elif engine_choice == "Qwen 3 Max (Direct Alibaba)":
+            llm = ChatOpenAI(
+                model="qwen3-max", 
+                openai_api_key=st.secrets["QWEN_API_KEY"],
+                openai_api_base="https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+            )
+        elif engine_choice == "Groq Compound (Router Model)":
+            llm = ChatGroq(model="groq/compound", groq_api_key=st.secrets["GROQ_API_KEY"])
+        elif engine_choice == "GPT-OSS-120B (Direct Groq)":
+            llm = ChatGroq(model="openai/gpt-oss-120b", groq_api_key=st.secrets["GROQ_API_KEY"])
+        elif engine_choice == "Llama 3.3 70B (Direct Groq)":
+            llm = ChatGroq(model="llama-3.3-70b-versatile", groq_api_key=st.secrets["GROQ_API_KEY"])
+        else:
+            llm = ChatOpenAI(model="meta-llama/llama-3.3-70b-instruct:free", openai_api_key=st.secrets["OPENROUTER_API_KEY"], openai_api_base="https://openrouter.ai/api/v1")
+
+        v_store = OracleVS(client=conn, table_name="RESUME_SEARCH", embedding_function=embeddings)
+        return v_store, llm
     except Exception as e:
         st.error(f"❌ Connection Failed: {e}")
         st.stop()
 
-v_store, llm, conn = init_connections()
+v_store, llm = init_connections(model_choice)
 
 # --- 3. Chat Session State ---
 if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {"role": "assistant", "content": "Hello! I can now search Freddy's resume using AI semantic matching. Ask me anything!"}
-    ]
+    update_greeting()
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# --- 4. Chat Input & Retrieval Logic ---
-if prompt := st.chat_input("Ask about Freddy's skills..."):
+# --- 4. Retrieval & Prompt Loop ---
+if prompt := st.chat_input("Ask about Freddy's experience..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        # Define the Prompt Template
-        template = """
-        SYSTEM: You are an expert Career Coach. Use the following context from Freddy's resume 
-        to answer the user's question. If the answer isn't in the context, be honest but 
-        highlight related strengths Freddy has.
+        template = f"""
+        SYSTEM: You are an Expert Career Coach representing Freddy Goh. 
+        Engine: {model_choice}.
         
-        CONTEXT: {context}
-        QUESTION: {question}
+        CONTEXT: {{context}}
+        QUESTION: {{question}}
         
-        INSTRUCTIONS: Summarize Freddy's experience, specific technical skills, and key achievements.
+        INSTRUCTIONS: Answer professionally using only the context provided.
+        ANSWER:
         """
         prompt_template = PromptTemplate(template=template, input_variables=["context", "question"])
 
-        with st.spinner("Searching Freddy's experience..."):
+        with st.spinner(f"Searching via {model_choice}..."):
             try:
-                # 🟢 THE PURE VECTOR FALLBACK:
-                # Instead of the Hybrid Retriever (which failed on the index type),
-                # we use the vector store itself to find the most similar content.
                 retriever = v_store.as_retriever(search_kwargs={"k": 5})
-
                 chain = RetrievalQA.from_chain_type(
                     llm=llm,
                     chain_type="stuff",
                     retriever=retriever,
                     chain_type_kwargs={"prompt": prompt_template}
                 )
-                
-                # Execute search and generation
-                response = chain.invoke(prompt)
+                response = chain.invoke({"query": prompt})
                 full_response = response["result"]
-                
                 st.markdown(full_response)
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
-                
             except Exception as e:
-                st.error(f"Search Error: {e}")
-                st.info("Check if the table RESUME_SEARCH contains data and valid vectors.")
+                st.error(f"Model Error: {e}")
