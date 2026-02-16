@@ -6,9 +6,9 @@ from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 
 # --- 1. Page Config ---
-st.set_page_config(page_title="Freddy's Career Advocate", layout="centered")
+st.set_page_config(page_title="Freddy's AI search", layout="centered")
 
-st.title("🚀 Freddy's AI Skill seatch")
+st.title("🚀 Freddy's AI Skill search")
 st.caption("Custom Reasoning RAG | Zilliz Cloud | Gemini 3.0 Flash Preview")
 
 # --- 2. Connections ---
