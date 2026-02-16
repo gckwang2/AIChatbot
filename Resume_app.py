@@ -14,7 +14,7 @@ from langchain_classic.chains import RetrievalQA
 st.set_page_config(page_title="Freddy Goh's AI Skills", layout="centered")
 
 st.title("🤖 Freddy's AI Career Assistant")
-st.caption("Semantic RAG powered by Zilliz Cloud & Gemini 3.0 Flash Preview")
+st.caption("Semantic RAG powered by Zilliz Cloud & Gemini 3.0 Flash Preview, RAG archiecture, semantic+vector search")
 
 # --- 2. Connections ---
 @st.cache_resource
@@ -81,7 +81,7 @@ if prompt := st.chat_input("Ask about Freddy's skills..."):
         """
         prompt_template = PromptTemplate(template=template, input_variables=["context", "question"])
 
-        with st.spinner("Analyzing Freddy's resume data in Zilliz..."):
+        with st.spinner("Analyzing Freddy's resume ......"):
             try:
                 # Semantic search: finds the top 5 chunks with the closest meaning
                 retriever = v_store.as_retriever(search_kwargs={"k": 5})
