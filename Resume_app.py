@@ -11,7 +11,7 @@ st.caption("Custom Reasoning RAG | Zilliz Cloud | Gemini 3.0 Flash Preview")
 # --- 2. Initialization ---
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        {"role": "assistant", "content": "I am Freddy's assistance. I'm ready to highlight his expertise for you!"}
+        {"role": "assistant", "content": "I am Freddy's assistant. I'm ready to highlight his expertise for you!"}
     ]
 
 # --- 3. Connections ---
