@@ -110,4 +110,36 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
 
 # --- 4. Retrieval & Prompt Loop ---
-if prompt := st.chat_input("
+if prompt := st.chat_input("Ask about Freddy's experience..."):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    with st.chat_message("assistant"):
+        template = f"""
+        SYSTEM: You are an Expert Career Coach representing Freddy Goh. 
+        Engine: {model_choice}.
+        
+        CONTEXT: {{context}}
+        QUESTION: {{question}}
+        
+        INSTRUCTIONS: Use the context to explain why Freddy is the best candidate.
+        ANSWER:
+        """
+        prompt_template = PromptTemplate(template=template, input_variables=["context", "question"])
+
+        with st.spinner(f"Analysing with {model_choice}..."):
+            try:
+                retriever = v_store.as_retriever(search_kwargs={"k": 5})
+                chain = RetrievalQA.from_chain_type(
+                    llm=llm,
+                    chain_type="stuff",
+                    retriever=retriever,
+                    chain_type_kwargs={"prompt": prompt_template}
+                )
+                response = chain.invoke({"query": prompt})
+                full_response = response["result"]
+                st.markdown(full_response)
+                st.session_state.messages.append({"role": "assistant", "content": full_response})
+            except Exception as e:
+                st.error(f"Model Error: {e}")
