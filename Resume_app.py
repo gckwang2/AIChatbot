@@ -1,60 +1,9 @@
 import streamlit as st
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_milvus import Milvus
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnablePassthrough
-from langchain_core.output_parsers import StrOutputParser
+from langchain_core.messages import AIMessage
 
-# --- 1. Page Config ---
-st.set_page_config(page_title="Freddy's AI search", layout="centered")
-
-st.title("🚀 Freddy's AI Skill search")
-st.caption("Custom Reasoning RAG | Zilliz Cloud | Gemini 3.0 Flash Preview")
-
-# --- 2. Connections ---
-@st.cache_resource
-def init_connections():
-    try:
-        embeddings = GoogleGenerativeAIEmbeddings(
-            model="gemini-embedding-001", 
-            google_api_key=st.secrets["GOOGLE_API_KEY"]
-        )
-        
-        # Using gemini-3-flash-preview
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-3-flash-preview", 
-            google_api_key=st.secrets["GOOGLE_API_KEY"],
-            temperature=0.4
-        )
-        
-        v_store = Milvus(
-            embedding_function=embeddings,
-            connection_args={
-                "uri": st.secrets["ZILLIZ_URI"],
-                "token": st.secrets["ZILLIZ_TOKEN"],
-                "secure": True
-            },
-            collection_name="RESUME_SEARCH"
-        )
-        return v_store, llm
-    except Exception as e:
-        st.error(f"❌ Connection Failed: {e}")
-        st.stop()
-
-v_store, llm = init_connections()
-
-# --- 3. Chat Session State ---
-if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {"role": "assistant", "content": "I am Freddy's AI skill search. I'm ready to highlight his expertise for you!"}
-    ]
-
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-
-# --- 4. Custom RAG Logic (Avoids langchain.chains) ---
-# ... (Keep your previous imports and init_connections) ...
+# ... (Keep your existing init_connections and Page Config) ...
 
 if prompt := st.chat_input("Ask about Freddy's potential..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
@@ -62,64 +11,61 @@ if prompt := st.chat_input("Ask about Freddy's potential..."):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        # --- NEW: QUERY EXPANSION STEP ---
-       # --- 1. QUERY EXPANSION STEP (Robust Version) ---
+        # --- 1. QUERY EXPANSION STEP ---
         expansion_prompt = f"""
-        You are an AI search optimizer. Generate 3 different versions of the following 
-        user question to improve semantic search retrieval in a resume database. 
-        Focus on technical synonyms and related job titles.
+        Generate 3 different search queries to find resumes related to this question.
+        Focus on technical synonyms and skills.
         
         Original Question: {prompt}
         
-        Output only the 3 queries, one per line, no numbering or extra text.
+        Output only the 3 queries, one per line, no numbering.
         """
         
         with st.spinner("Expanding search intent..."):
             expansion_response = llm.invoke(expansion_prompt)
             
-            # 🟢 Robustly extract content from the AIMessage object
-            if hasattr(expansion_response, 'content'):
+            # 🟢 Robustly handle the response content
+            if isinstance(expansion_response, AIMessage):
                 expansion_text = expansion_response.content
             else:
                 expansion_text = str(expansion_response)
 
-            # Clean and split into a list
-            queries = [q.strip() for q in expansion_text.strip().split("\n") if q.strip()]
+            # Clean and split (This is where your error was happening)
+            queries = [q.strip() for q in expansion_text.split("\n") if q.strip()]
             all_queries = [prompt] + queries[:3] 
 
         # --- 2. MULTI-QUERY RETRIEVAL ---
-        with st.spinner(f"Searching Milvus with {len(all_queries)} perspectives..."):
+        with st.spinner(f"Searching Milvus for '{prompt}' and synonyms..."):
             try:
                 retriever = v_store.as_retriever(search_kwargs={"k": 5})
                 all_docs = []
                 
+                # Search for each variation to widen the net
                 for q in all_queries:
                     docs = retriever.invoke(q)
                     all_docs.extend(docs)
                 
-                # Deduplicate based on content
+                # Deduplicate documents
                 unique_docs = {doc.page_content: doc for doc in all_docs}.values()
                 context_text = "\n\n".join([doc.page_content for doc in unique_docs])
 
-                # --- 3. CAREER ADVOCATE GENERATION ---
-                advocate_template = """
+                # --- 3. CAREER ADVOCATE REASONING ---
+                advocate_prompt = f"""
                 ROLE: You are Freddy Goh's Career Advocate.
+                CONTEXT: {context_text}
+                QUESTION: {prompt}
                 
-                INSTRUCTION: 
-                Use the following context to answer the question. 
-                Identify logical overlaps and transferable skills. 
-                Represent Freddy's potential persuasively.
-
-                CONTEXT: {context}
-                QUESTION: {question}
+                INSTRUCTION: Analyze the context. Highlight Freddy's skills and infer 
+                logical strengths based on his experience. Be persuasive.
                 """
                 
-                # Use string formatting to avoid LCEL import issues
-                final_input = advocate_template.format(context=context_text, question=prompt)
-                final_response = llm.invoke(final_input)
+                final_response = llm.invoke(advocate_prompt)
                 
-                st.markdown(final_response.content)
-                st.session_state.messages.append({"role": "assistant", "content": final_response.content})
+                # Extract content safely
+                answer = final_response.content if hasattr(final_response, 'content') else str(final_response)
+                
+                st.markdown(answer)
+                st.session_state.messages.append({"role": "assistant", "content": answer})
                 
             except Exception as e:
                 st.error(f"Search/Advocacy Error: {e}")
