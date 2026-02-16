@@ -6,7 +6,9 @@ import streamlit as st
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_milvus import Milvus
 from langchain_core.prompts import PromptTemplate
-from langchain.chains import RetrievalQA
+#from langchain.chains import RetrievalQA
+# 🟢 Use this updated import path
+from langchain_classic.chains import RetrievalQA
 
 # --- 1. Page Config ---
 st.set_page_config(page_title="Freddy Goh's AI Skills", layout="centered")
