@@ -19,39 +19,44 @@ def update_greeting():
         st.session_state.messages = [{"role": "assistant", "content": greeting}]
 
 st.title("🤖 Freddy's AI Career Assistant")
-st.caption("2026 Search: Oracle 23ai TLS + HNSW Indexing + Qwen 3 Max")
+st.caption("2026 Engine: Oracle 23ai + Qwen 3 Max Flagship")
 
 with st.sidebar:
     st.header("Engine Settings")
-    # Cleaned up list to ensure Qwen 3 Max is present and correctly mapped
+    
+    # FIXED: Re-structured options list to ensure visibility
+    available_models = [
+        "Gemini 3 Flash (Direct Google)", 
+        "Gemini 2.5 Pro (Direct Google)", 
+        "Qwen 3 Max (Direct Alibaba)",
+        "Qwen 3 Max Thinking (Alibaba)",
+        "Groq Compound (Router Model)",
+        "GPT-OSS-120B (Direct Groq)",
+        "Llama 3.3 70B (Direct Groq)", 
+        "Llama 3.3 70B (OpenRouter Free)"
+    ]
+    
     model_choice = st.selectbox(
         "Select AI Engine:",
-        options=[
-            "Gemini 3 Flash (Direct Google)", 
-            "Gemini 2.5 Pro (Direct Google)", 
-            "Qwen 3 Max (Direct Alibaba)",      # Standard Flagship
-            "Qwen 3 Max Thinking (Alibaba)",    # Reasoning Model (Jan 2026)
-            "Groq Compound (Router Model)",
-            "GPT-OSS-120B (Direct Groq)",
-            "Llama 3.3 70B (Direct Groq)", 
-            "Llama 3.3 70B (OpenRouter Free)"
-        ],
+        options=available_models,
         index=0,
         key="model_selector",
         on_change=update_greeting
     )
-    if "Max" in model_choice or "Pro" in model_choice:
-        st.info("🚀 Using High-Reasoning Flagship")
+    
+    if "Max" in model_choice:
+        st.success("🔥 High-Reasoning Qwen 3 Max Active")
 
-# --- 2. Connection Logic (Standard TLS) ---
+# --- 2. Connection Logic ---
 @st.cache_resource
 def init_connections(engine_choice):
     try:
+        # Database connection with OOB disabled for TLS stability
         conn = oracledb.connect(
             user=st.secrets["DB_USER"],
             password=st.secrets["DB_PASSWORD"],
             dsn=st.secrets["DB_DSN"],
-            disable_oob=True # Added as per your stable connection requirement
+            disable_oob=True
         )
         
         embeddings = GoogleGenerativeAIEmbeddings(
@@ -59,7 +64,7 @@ def init_connections(engine_choice):
             google_api_key=st.secrets["GOOGLE_API_KEY"]
         )
         
-        # LLM Logic Mapping
+        # LLM Mapping
         if engine_choice == "Gemini 3 Flash (Direct Google)":
             llm = ChatGoogleGenerativeAI(model="gemini-3-flash-preview", google_api_key=st.secrets["GOOGLE_API_KEY"])
         
@@ -74,7 +79,6 @@ def init_connections(engine_choice):
             )
 
         elif engine_choice == "Qwen 3 Max Thinking (Alibaba)":
-            # Points to the new 2026-01-23 snapshot for deep reasoning
             llm = ChatOpenAI(
                 model="qwen3-max-2026-01-23", 
                 openai_api_key=st.secrets["QWEN_API_KEY"],
@@ -109,26 +113,22 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# --- 4. Retrieval & Prompt Loop ---
+# --- 4. RAG Retrieval Loop ---
 if prompt := st.chat_input("Ask about Freddy's experience..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        template = f"""
-        SYSTEM: You are an Expert Career Coach representing Freddy Goh. 
-        Engine: {model_choice}.
-        
-        CONTEXT: {{context}}
-        QUESTION: {{question}}
-        
-        INSTRUCTIONS: Use the context to explain why Freddy is the best candidate.
+        template = """
+        SYSTEM: You are a Career Coach for Freddy Goh.
+        CONTEXT: {context}
+        QUESTION: {question}
         ANSWER:
         """
         prompt_template = PromptTemplate(template=template, input_variables=["context", "question"])
 
-        with st.spinner(f"Analysing with {model_choice}..."):
+        with st.spinner(f"Running {model_choice}..."):
             try:
                 retriever = v_store.as_retriever(search_kwargs={"k": 5})
                 chain = RetrievalQA.from_chain_type(
