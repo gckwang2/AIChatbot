@@ -11,7 +11,8 @@ from langchain_core.prompts import PromptTemplate
 st.set_page_config(page_title="Freddy Goh's AI Skills", layout="centered")
 
 def update_greeting():
-    new_model = st.session_state.model_selector
+    # Note: Using the new key here as well
+    new_model = st.session_state.model_selector_v2
     greeting = f"I am now using {new_model}. How can I help?"
     if "messages" in st.session_state:
         st.session_state.messages[0] = {"role": "assistant", "content": greeting}
@@ -24,7 +25,7 @@ st.caption("2026 Engine: Oracle 23ai + Qwen 3 Max Flagship")
 with st.sidebar:
     st.header("Engine Settings")
     
-    # FIXED: Re-structured options list to ensure visibility
+    # Force the list to be fresh
     available_models = [
         "Gemini 3 Flash (Direct Google)", 
         "Gemini 2.5 Pro (Direct Google)", 
@@ -36,22 +37,22 @@ with st.sidebar:
         "Llama 3.3 70B (OpenRouter Free)"
     ]
     
+    # Using 'model_selector_v2' to force a widget refresh
     model_choice = st.selectbox(
         "Select AI Engine:",
         options=available_models,
         index=0,
-        key="model_selector",
+        key="model_selector_v2",
         on_change=update_greeting
     )
     
     if "Max" in model_choice:
-        st.success("🔥 High-Reasoning Qwen 3 Max Active")
+        st.success("🔥 Qwen 3 Max Flagship Active")
 
 # --- 2. Connection Logic ---
 @st.cache_resource
 def init_connections(engine_choice):
     try:
-        # Database connection with OOB disabled for TLS stability
         conn = oracledb.connect(
             user=st.secrets["DB_USER"],
             password=st.secrets["DB_PASSWORD"],
