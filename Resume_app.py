@@ -3,10 +3,11 @@ warnings.filterwarnings("ignore", message="Core Pydantic V1 functionality isn't 
 
 import streamlit as st
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
-from langchain_milvus import Milvus
-from langchain_core.prompts import PromptTemplate
+# 🟢 Use these updated imports
 from langchain.chains import RetrievalQA
-
+from langchain_community.vectorstores import Milvus
+# Ensure this is present to handle the k=15 logic correctly
+from langchain_core.prompts import PromptTemplate
 # --- 1. Page Config ---
 st.set_page_config(page_title="Freddy's Career Advocate", layout="centered")
 
