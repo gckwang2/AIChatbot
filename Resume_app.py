@@ -3,69 +3,91 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGener
 from langchain_milvus import Milvus
 from langchain_core.messages import AIMessage
 
-# ... (Keep your existing init_connections and Page Config) ...
+# --- 1. Page Config ---
+st.set_page_config(page_title="Freddy's Career Advocate", layout="centered")
 
+# --- 2. INITIALIZATION (Must happen before any widget logic) ---
+if "messages" not in st.session_state:
+    st.session_state.messages = [
+        {"role": "assistant", "content": "I am Freddy's Career Advocate. I connect the dots between his deep expertise and your requirements. How can I assist?"}
+    ]
+
+# --- 3. Connections ---
+@st.cache_resource
+def init_connections():
+    try:
+        embeddings = GoogleGenerativeAIEmbeddings(
+            model="gemini-embedding-001", 
+            google_api_key=st.secrets["GOOGLE_API_KEY"]
+        )
+        # Using gemini-3-flash-preview
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-3-flash-preview", 
+            google_api_key=st.secrets["GOOGLE_API_KEY"],
+            temperature=0.4
+        )
+        v_store = Milvus(
+            embedding_function=embeddings,
+            connection_args={
+                "uri": st.secrets["ZILLIZ_URI"],
+                "token": st.secrets["ZILLIZ_TOKEN"],
+                "secure": True
+            },
+            collection_name="RESUME_SEARCH"
+        )
+        return v_store, llm
+    except Exception as e:
+        st.error(f"❌ Connection Failed: {e}")
+        st.stop()
+
+v_store, llm = init_connections()
+
+# --- 4. Display Chat History ---
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+# --- 5. Chat Input & Advocate Logic ---
 if prompt := st.chat_input("Ask about Freddy's potential..."):
+    # Safe append now that we know session_state.messages is initialized
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        # --- 1. QUERY EXPANSION STEP ---
-        expansion_prompt = f"""
-        Generate 3 different search queries to find resumes related to this question.
-        Focus on technical synonyms and skills.
-        
-        Original Question: {prompt}
-        
-        Output only the 3 queries, one per line, no numbering.
-        """
+        # STEP A: Query Expansion for Widening search
+        expansion_prompt = f"Generate 3 technical search query variations for: {prompt}. Output queries only, one per line."
         
         with st.spinner("Expanding search intent..."):
-            expansion_response = llm.invoke(expansion_prompt)
-            
-            # 🟢 Robustly handle the response content
-            if isinstance(expansion_response, AIMessage):
-                expansion_text = expansion_response.content
-            else:
-                expansion_text = str(expansion_response)
+            exp_res = llm.invoke(expansion_prompt)
+            exp_text = exp_res.content if hasattr(exp_res, 'content') else str(exp_res)
+            queries = [q.strip() for q in exp_text.split("\n") if q.strip()][:3]
+            all_queries = [prompt] + queries
 
-            # Clean and split (This is where your error was happening)
-            queries = [q.strip() for q in expansion_text.split("\n") if q.strip()]
-            all_queries = [prompt] + queries[:3] 
-
-        # --- 2. MULTI-QUERY RETRIEVAL ---
-        with st.spinner(f"Searching Milvus for '{prompt}' and synonyms..."):
+        # STEP B: Multi-Query Retrieval from Zilliz
+        with st.spinner("Analyzing resume data..."):
             try:
                 retriever = v_store.as_retriever(search_kwargs={"k": 5})
                 all_docs = []
-                
-                # Search for each variation to widen the net
                 for q in all_queries:
-                    docs = retriever.invoke(q)
-                    all_docs.extend(docs)
+                    all_docs.extend(retriever.invoke(q))
                 
-                # Deduplicate documents
-                unique_docs = {doc.page_content: doc for doc in all_docs}.values()
-                context_text = "\n\n".join([doc.page_content for doc in unique_docs])
+                # Deduplicate context
+                context_text = "\n\n".join(list(set([doc.page_content for doc in all_docs])))
 
-                # --- 3. CAREER ADVOCATE REASONING ---
+                # STEP C: Career Advocate Reasoning
                 advocate_prompt = f"""
-                ROLE: You are Freddy Goh's Career Advocate.
+                ROLE: Freddy Goh's Career Advocate.
                 CONTEXT: {context_text}
                 QUESTION: {prompt}
-                
-                INSTRUCTION: Analyze the context. Highlight Freddy's skills and infer 
-                logical strengths based on his experience. Be persuasive.
+                INSTRUCTION: Identify transferable skills and logical overlaps. Be persuasive.
                 """
                 
-                final_response = llm.invoke(advocate_prompt)
-                
-                # Extract content safely
-                answer = final_response.content if hasattr(final_response, 'content') else str(final_response)
+                final_res = llm.invoke(advocate_prompt)
+                answer = final_res.content if hasattr(final_res, 'content') else str(final_res)
                 
                 st.markdown(answer)
                 st.session_state.messages.append({"role": "assistant", "content": answer})
                 
             except Exception as e:
-                st.error(f"Search/Advocacy Error: {e}")
+                st.error(f"Error: {e}")
