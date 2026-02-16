@@ -64,7 +64,7 @@ if prompt := st.chat_input("Ask about Freddy's potential..."):
         template = """
         ROLE: You are Freddy Goh's "Career Advocate." 
         INSTRUCTION: Analyze the resume context. Look for transferable skills and logical overlaps. 
-        If a skill isn't explicitly listed, infer capability based on his senior level. Do not return "Career Advocate" in the return response.
+        If a skill isn't explicitly listed, infer the related skills found in the resume,and use his previous experience based on his senior level. Do not return "Career Advocate" in the return response.
         
         CONTEXT: {context}
         
