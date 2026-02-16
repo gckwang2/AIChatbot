@@ -1,13 +1,14 @@
-import warnings
-warnings.filterwarnings("ignore", message="Core Pydantic V1 functionality isn't compatible")
-
 import streamlit as st
+import oracledb
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
-# 🟢 Use these updated imports
-from langchain.chains import RetrievalQA
-from langchain_community.vectorstores import Milvus
-# Ensure this is present to handle the k=15 logic correctly
+from langchain_milvus import Milvus
 from langchain_core.prompts import PromptTemplate
+
+# 🟢 New stable import for 2026
+try:
+    from langchain.chains import RetrievalQA
+except ImportError:
+    from langchain.chains.retrieval_qa.base import RetrievalQA
 # --- 1. Page Config ---
 st.set_page_config(page_title="Freddy's Career Advocate", layout="centered")
 
