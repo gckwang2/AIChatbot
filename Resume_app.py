@@ -18,7 +18,7 @@ def get_db_connection():
     return oracledb.connect(
         user=st.secrets["DB_USER"],
         password=st.secrets["DB_PASSWORD"],
-        dsn=st.secrets["DB_DSN"]
+        dsn=st.secrets["DB_DSN"],
         disable_oob=True # Crucial for stable TLS/Cloud connections
     )
 
