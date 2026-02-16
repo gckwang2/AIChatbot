@@ -3,12 +3,12 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGener
 from langchain_milvus import Milvus
 
 # --- 1. Page Config ---
-st.set_page_config(page_title="Freddy's  skill search", layout="centered")
+st.set_page_config(page_title="Freddy's Agentic Advocate", layout="centered")
 
 # --- 2. Initialization ---
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        {"role": "assistant", "content": "I am Freddy's Assistant. I don't just search; I strategize. How can I prove Freddy is the right fit for your role?"}
+        {"role": "assistant", "content": "I am Freddy's Agentic Career Advocate. I've analyzed his 23+ years of experience. How can I help you today?"}
     ]
 
 # --- 3. Connections ---
@@ -19,11 +19,10 @@ def init_connections():
             model="gemini-embedding-001", 
             google_api_key=st.secrets["GOOGLE_API_KEY"]
         )
-        # Using Gemini 3.0 Flash Preview for high-speed reasoning
         llm = ChatGoogleGenerativeAI(
             model="gemini-3-flash-preview", 
             google_api_key=st.secrets["GOOGLE_API_KEY"],
-            temperature=0.2 # Lower temperature for better logic in agents
+            temperature=0.2 
         )
         v_store = Milvus(
             embedding_function=embeddings,
@@ -41,11 +40,24 @@ def init_connections():
 
 v_store, llm = init_connections()
 
-# --- 4. Deep Extraction Helper ---
-def get_text(response):
+# --- 4. THE CLEANER: This prevents the "Unreadable" Metadata ---
+def extract_clean_text(response):
+    """Specifically designed to handle Gemini's complex dictionary outputs."""
+    # Check if it's a standard LangChain Message object
     if hasattr(response, 'content'):
-        return str(response.content)
-    return str(response)
+        content = response.content
+    else:
+        content = response
+
+    # If the content is a list (this is what happened in your last error)
+    if isinstance(content, list):
+        # Look for the 'text' key inside the first dictionary of the list
+        if len(content) > 0 and isinstance(content[0], dict):
+            return content[0].get('text', str(content[0]))
+        return " ".join([str(i) for i in content])
+    
+    # If it's already a string, just return it
+    return str(content)
 
 # --- 5. Display History ---
 for message in st.session_state.messages:
@@ -53,25 +65,21 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
 
 # --- 6. The Agentic Logic ---
-if prompt := st.chat_input("Ask about Freddy's leadership, AI, or strategy..."):
+if prompt := st.chat_input("Ask about Freddy's potential..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        # --- PHASE 1: RESEARCH PLANNING ---
-        planning_prompt = f"""
-        You are a Research Agent. Analyze the user question: "{prompt}"
-        Break it down into 3 specific search areas to fully evaluate Freddy Goh's background.
-        Example: If asked about CTO potential, search for: 1. Strategic Leadership, 2. Technical Architecture, 3. Team Mentorship.
-        Output ONLY the 3 search topics, one per line.
-        """
+        # --- PHASE 1: Agent Research Plan ---
+        planning_prompt = f"Identify 3 distinct technical search queries to evaluate: '{prompt}'. Output queries only, one per line."
         
-        with st.spinner("🧠 Agent is planning research strategy..."):
+        with st.spinner("🧠 Agent is planning research..."):
             plan_res = llm.invoke(planning_prompt)
-            search_topics = [t.strip() for t in get_text(plan_res).split("\n") if t.strip()][:3]
+            clean_plan = extract_clean_text(plan_res)
+            search_topics = [t.strip() for t in clean_plan.split("\n") if t.strip()][:3]
 
-        # --- PHASE 2: EXECUTION (TOOL USE) ---
+        # --- PHASE 2: Execution (Tool Use) ---
         accumulated_context = []
         retriever = v_store.as_retriever(search_kwargs={"k": 5})
         
@@ -80,30 +88,24 @@ if prompt := st.chat_input("Ask about Freddy's leadership, AI, or strategy..."):
                 docs = retriever.invoke(topic)
                 accumulated_context.extend([d.page_content for d in docs])
 
-        # --- PHASE 3: CRITICAL REFLECTION & ADVOCACY ---
+        # --- PHASE 3: Synthesis & Advocacy ---
         context_str = "\n\n".join(list(set(accumulated_context)))
         
         final_agent_prompt = f"""
-        ROLE: You are Freddy Goh's Senior Career Advocate.
+        ROLE: Freddy Goh's Senior Career Advocate.
+        CONTEXT: {context_str}
+        USER QUESTION: {prompt}
         
-        RESEARCH DATA:
-        {context_str}
-        
-        USER QUESTION:
-        {prompt}
-        
-        AGENTIC TASK:
-        1. Critically evaluate the research data.
-        2. Identify specific achievements (metrics, years, technologies).
-        3. If information is missing, use logic to explain why his senior experience (23+ years) implies capability.
-        4. Draft a persuasive, executive-level recommendation.
-        
-        RESPONSE:
+        TASK:
+        Use the context to provide a professional, persuasive response. 
+        Focus on metrics, seniority (23+ years), and leadership. 
+        Do not show any metadata, JSON, or technical signatures.
         """
 
-        with st.spinner("⚖️ Agent is synthesizing final recommendation..."):
+        with st.spinner("⚖️ Synthesizing recommendation..."):
             final_res = llm.invoke(final_agent_prompt)
-            answer = get_text(final_res)
+            # Use the cleaner again for the final output
+            answer = extract_clean_text(final_res)
             
             st.markdown(answer)
             st.session_state.messages.append({"role": "assistant", "content": answer})
