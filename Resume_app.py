@@ -2,7 +2,8 @@ import streamlit as st
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_milvus import Milvus
 from langchain_core.prompts import ChatPromptTemplate
-from langchain.chains import create_retrieval_chain
+# Replace lines 5 and 6 with these explicit paths:
+from langchain.chains.retrieval import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 
 # --- 1. Page Config ---
