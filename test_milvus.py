@@ -1,12 +1,22 @@
 from pymilvus import connections, utility, MilvusException
 import time
-
-# --- CONFIGURATION ---
-# Replace these with your actual values from Streamlit secrets
+import os
 
 def test_connection():
+    # --- CONFIGURATION ---
+    # Try to get from environment/secrets first (for Cloud), 
+    # otherwise fallback to hardcoded strings (for local testing)
+    try:
+        import streamlit as st
+        uri = st.secrets.get("ZILLIZ_URI", "YOUR_HARDCODED_URI_HERE")
+        token = st.secrets.get("ZILLIZ_TOKEN", "YOUR_HARDCODED_TOKEN_HERE")
+    except:
+        # If not running in streamlit, use these:
+        uri = "https://your-endpoint.zillizcloud.com:443" 
+        token = "your-api-key-token"
+
     print(f"--- Starting Milvus Connection Test ---")
-    print(f"Target URI: {ZILLIZ_URI}")
+    print(f"Target URI: {uri}")
     
     start_time = time.time()
     try:
@@ -14,10 +24,10 @@ def test_connection():
         print("Attempting to connect...")
         connections.connect(
             alias="default",
-            uri=ZILLIZ_URI,
-            token=ZILLIZ_TOKEN,
+            uri=uri,
+            token=token,
             secure=True,
-            timeout=30  # Increased timeout for cloud handshake
+            timeout=30 
         )
         
         # 2. Verify connection status
@@ -25,14 +35,9 @@ def test_connection():
             duration = round(time.time() - start_time, 2)
             print(f"✅ SUCCESS: Connected to Milvus in {duration}s")
             
-            # 3. List existing collections to prove read access
+            # 3. List existing collections
             collections = utility.list_collections()
             print(f"Found {len(collections)} collections: {collections}")
-            
-            if "RESUME_SEARCH" in collections:
-                print("✅ Found 'RESUME_SEARCH' collection.")
-            else:
-                print("⚠️ 'RESUME_SEARCH' not found. Check your collection name.")
                 
         else:
             print("❌ FAILED: connections.has_connection returned False.")
@@ -42,7 +47,6 @@ def test_connection():
     except Exception as e:
         print(f"❌ UNEXPECTED ERROR: {e}")
     finally:
-        # Properly close
         try:
             connections.disconnect("default")
             print("--- Test Finished & Disconnected ---")
