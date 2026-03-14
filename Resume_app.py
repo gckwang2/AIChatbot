@@ -8,7 +8,7 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGener
 # --- 1. Page Config ---
 st.set_page_config(page_title="Freddy's skills finder powered by AI", layout="centered")
 st.title("🚀 Freddy's Skill Search powered by AI")
-st.caption("Agentic RAG | Zilliz Cloud (REST) | Gemini 3.0 Flash Preview")
+st.caption("Agentic RAG | Zilliz Cloud Vector Search | Gemini 3.0 Flash Preview")
 
 # --- 2. Persistent Resources ---
 @st.cache_resource(show_spinner=False)
