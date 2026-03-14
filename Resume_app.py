@@ -24,36 +24,41 @@ def get_llm():
     )
 
 def get_vector_store_safe():
-    from pymilvus import MilvusClient
+    from pymilvus import connections, MilvusClient
     
     st.write("🔍 Diagnostic: Entering get_vector_store_safe...")
     
-    # 1. Official Lightweight Client (Avoids the hang)
+    # 1. Register the 'default' connection alias (Required by LangChain Milvus object)
+    if not connections.has_connection("default"):
+        st.write("📡 Diagnostic: Registering 'default' alias...")
+        connections.connect(
+            alias="default",
+            uri=st.secrets["ZILLIZ_URI"],
+            token=st.secrets["ZILLIZ_TOKEN"],
+            secure=True,
+            timeout=60
+        )
+    
+    # 2. Verify with the lightweight client
     client = MilvusClient(
         uri=st.secrets["ZILLIZ_URI"],
         token=st.secrets["ZILLIZ_TOKEN"]
     )
-    st.write("✅ Diagnostic: MilvusClient Connected.")
+    st.write("✅ Diagnostic: Milvus Connection Registered.")
 
-    # 2. Setup Embeddings
+    # 3. Setup Embeddings
     st.write("🔢 Diagnostic: Initializing Google Embeddings...")
     embeddings = GoogleGenerativeAIEmbeddings(
         model="gemini-embedding-001", 
         google_api_key=st.secrets["GOOGLE_API_KEY"]
     )
     
-    # 3. Use the direct URI in the Milvus object 
-    # (This version skips the automatic LangChain handshake)
-    st.write("📦 Diagnostic: Direct Object Mapping...")
+    # 4. Map the object to the alias we just created
+    st.write("📦 Diagnostic: Mapping to Registered Connection...")
     vstore = Milvus(
         embedding_function=embeddings,
-        connection_args={
-            "uri": st.secrets["ZILLIZ_URI"],
-            "token": st.secrets["ZILLIZ_TOKEN"],
-            "secure": True
-        },
+        connection_args={"alias": "default"}, # Match the alias in Step 1
         collection_name="RESUME_SEARCH",
-        # Explicitly telling it NOT to search for the index/schema automatically
         search_params={"metric_type": "L2", "params": {"nprobe": 10}}
     )
     st.write("✅ Diagnostic: Vector Store Ready.")
