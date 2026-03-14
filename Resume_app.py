@@ -26,29 +26,38 @@ def get_llm():
 
 @st.cache_resource(show_spinner=False)
 def get_vector_store():
-    """Initializes the connection to Zilliz and wraps it in LangChain."""
-    # Ensure connection is established
+    st.write("🔍 Diagnostic: Entering get_vector_store...")
+    
+    # Check 1: Connection
     if not connections.has_connection("default"):
+        st.write("📡 Diagnostic: Establishing Zilliz Connection...")
         connections.connect(
             alias="default",
             uri=st.secrets["ZILLIZ_URI"],
             token=st.secrets["ZILLIZ_TOKEN"],
             secure=True,
-            timeout=60  # Increased based on diagnostic results
+            timeout=60
         )
+        st.write("✅ Diagnostic: Zilliz Connected.")
     
+    # Check 2: Embeddings
+    st.write("🔢 Diagnostic: Initializing Google Embeddings...")
     embeddings = GoogleGenerativeAIEmbeddings(
         model="gemini-embedding-001", 
         google_api_key=st.secrets["GOOGLE_API_KEY"]
     )
+    st.write("✅ Diagnostic: Embeddings Initialized.")
     
-    return Milvus(
+    # Check 3: The Object Wrap
+    st.write("📦 Diagnostic: Creating Milvus Vector Store Object...")
+    vstore = Milvus(
         embedding_function=embeddings,
         connection_args={"alias": "default"},
         collection_name="RESUME_SEARCH",
-        # Explicit search params to avoid 'schema fetching' hangs
         search_params={"metric_type": "L2", "params": {"nprobe": 10}}
     )
+    st.write("✅ Diagnostic: Milvus Object Created.")
+    return vstore
 
 # --- 4. System Initialization (The Sequential Flow) ---
 if "messages" not in st.session_state:
