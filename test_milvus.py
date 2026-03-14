@@ -4,30 +4,38 @@ from langchain_milvus import Milvus
 from pymilvus import connections, utility
 
 # --- 1. Page Config ---
-st.set_page_config(page_title="Freddy's skills finder", layout="centered")
+st.set_page_config(page_title="Freddy's Skills Finder", layout="centered")
 st.title("🚀 Freddy's Skill Search")
+st.caption("Agentic RAG | Zilliz Cloud | Gemini 3.0 Flash Preview")
 
-# --- 2. GLOBAL CONNECTION (The Fix) ---
-# This MUST run on every script rerun to ensure the 'default' alias exists
-try:
-    if not connections.has_connection("default"):
-        connections.connect(
-            alias="default",
-            uri=st.secrets["ZILLIZ_URI"],
-            token=st.secrets["ZILLIZ_TOKEN"],
-            secure=True
-        )
-except Exception as e:
-    st.error(f"❌ Global Connection Failed: {e}")
+# --- 2. THE GLOBAL CONNECTION (From test-milvus.py) ---
+# This ensures the 'default' connection exists before LangChain ever looks for it.
+def force_milvus_connection():
+    try:
+        if not connections.has_connection("default"):
+            connections.connect(
+                alias="default",
+                uri=st.secrets["ZILLIZ_URI"],
+                token=st.secrets["ZILLIZ_TOKEN"],
+                secure=True,
+                timeout=30
+            )
+        return True
+    except Exception as e:
+        st.error(f"❌ Milvus Global Connection Failed: {e}")
+        return False
+
+# Run the connection check immediately
+if not force_milvus_connection():
     st.stop()
 
-# --- 3. Cached Resource Loading ---
+# --- 3. Initialization & Caching ---
 @st.cache_resource
-def load_models():
+def init_models():
     try:
-        # Verification check
+        # Verify collection exists (Sanity check from test script)
         if not utility.has_collection("RESUME_SEARCH"):
-            st.error("❌ Collection 'RESUME_SEARCH' not found.")
+            st.error("❌ Collection 'RESUME_SEARCH' not found in Zilliz.")
             st.stop()
 
         embeddings = GoogleGenerativeAIEmbeddings(
@@ -52,18 +60,18 @@ def load_models():
         )
         return v_store, llm
     except Exception as e:
-        st.error(f"❌ Model Loading Failed: {e}")
+        st.error(f"❌ Model Initialization Failed: {e}")
         st.stop()
 
-v_store, llm = load_models()
+v_store, llm = init_models()
 
-# --- 4. Session State Initialization ---
+# Initialize Chat History
 if "messages" not in st.session_state:
     st.session_state.messages = [
         {"role": "assistant", "content": "I am Freddy's Assistant. I've analyzed his 20+ years of experience. How can I help you today?"}
     ]
 
-# --- 5. THE CLEANER ---
+# --- 4. THE CLEANER ---
 def extract_clean_text(response):
     if hasattr(response, 'content'):
         content = response.content
@@ -75,6 +83,15 @@ def extract_clean_text(response):
             return content[0].get('text', str(content[0]))
         return " ".join([str(i) for i in content])
     return str(content)
+
+# --- 5. UI: Sidebar Status ---
+with st.sidebar:
+    st.header("System Status")
+    if connections.has_connection("default"):
+        st.success("Milvus: Connected")
+    else:
+        st.error("Milvus: Disconnected")
+    st.info(f"Model: Gemini 3.0 Flash")
 
 # --- 6. Display History ---
 for message in st.session_state.messages:
@@ -109,9 +126,10 @@ if prompt := st.chat_input("Ask about Freddy's potential..."):
         
         final_agent_prompt = f"""
         ROLE: You are Freddy Goh's "Career Advocate." 
+        INSTRUCTION: Analyze the context provided.
         CONTEXT: {context_str}
         USER QUESTION: {prompt}
-        TASK: Use the context to provide a professional, persuasive response. Do not return "Career Advocate" or JSON.
+        TASK: Provide a professional, persuasive response. Do not return JSON or metadata.
         """
 
         with st.spinner("⚖️ Synthesizing recommendation..."):
