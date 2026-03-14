@@ -89,7 +89,7 @@ if prompt := st.chat_input("Ask about Freddy's potential..."):
   #          st.write("🔍 Diagnostic: Initializing REST Search via HTTPS...")
 
             for topic in search_topics:
-                with st.spinner(f"🔍 Searching for: {topic}..."):
+                with st.spinner(f"Consulting Freddy's career history.."):
                     # Generate vector
                     query_vector = embeddings_model.embed_query(topic)
                     
