@@ -28,39 +28,35 @@ def get_vector_store_safe():
     
     st.write("🔍 Diagnostic: Entering get_vector_store_safe...")
     
-    # 1. Register the 'default' connection alias (Required by LangChain Milvus object)
+    # 1. Establish the connection once and for all
     if not connections.has_connection("default"):
-        st.write("📡 Diagnostic: Registering 'default' alias...")
         connections.connect(
             alias="default",
             uri=st.secrets["ZILLIZ_URI"],
             token=st.secrets["ZILLIZ_TOKEN"],
             secure=True,
-            timeout=60
+            timeout=120  # Double the timeout for Frankfurt latency
         )
     
-    # 2. Verify with the lightweight client
-    client = MilvusClient(
-        uri=st.secrets["ZILLIZ_URI"],
-        token=st.secrets["ZILLIZ_TOKEN"]
-    )
-    st.write("✅ Diagnostic: Milvus Connection Registered.")
-
-    # 3. Setup Embeddings
-    st.write("🔢 Diagnostic: Initializing Google Embeddings...")
+    # 2. Setup Embeddings
     embeddings = GoogleGenerativeAIEmbeddings(
         model="gemini-embedding-001", 
         google_api_key=st.secrets["GOOGLE_API_KEY"]
     )
     
-    # 4. Map the object to the alias we just created
-    st.write("📦 Diagnostic: Mapping to Registered Connection...")
+    # 3. Use the 'from_existing_collection' method 
+    # This is much faster and avoids the 'auto-handshake' hang
+    st.write("📦 Diagnostic: Attaching to Existing Collection...")
     vstore = Milvus(
         embedding_function=embeddings,
-        connection_args={"alias": "default"}, # Match the alias in Step 1
         collection_name="RESUME_SEARCH",
-        search_params={"metric_type": "L2", "params": {"nprobe": 10}}
+        connection_args={
+            "uri": st.secrets["ZILLIZ_URI"],
+            "token": st.secrets["ZILLIZ_TOKEN"],
+            "secure": True
+        }
     )
+    
     st.write("✅ Diagnostic: Vector Store Ready.")
     return vstore
 
