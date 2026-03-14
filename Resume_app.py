@@ -1,13 +1,8 @@
 import streamlit as st
-import nest_asyncio
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_milvus import Milvus
-from pymilvus import connections
 
 # --- 1. Page Config ---
-# This must run before ANY other imports or logic to prevent the "oven" hang.
-nest_asyncio.apply()
-
 st.set_page_config(page_title="Freddy's skills finder powered by AI", layout="centered")
 st.title("🚀 Freddy's Skill Search powered by AI")
 st.caption("Agentic RAG | Zilliz Cloud | Gemini 3.0 Flash Preview")
@@ -18,65 +13,33 @@ if "messages" not in st.session_state:
         {"role": "assistant", "content": "I am Freddy's Assistant. I've analyzed his 20+ years of experience. How can I help you today?"}
     ]
 
-# --- 3. Connections (Stable Version) ---
-@st.cache_resource(show_spinner="Connecting to Brain & Database...")
-
-def _get_google_services():
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-3-flash-preview", 
-        google_api_key=st.secrets["GOOGLE_API_KEY"],
-        temperature=0.2 
-    )
-    embeddings = GoogleGenerativeAIEmbeddings(
-        model="gemini-embedding-001", 
-        google_api_key=st.secrets["GOOGLE_API_KEY"]
-    )
-    return llm, embeddings
-
-@st.cache_resource(show_spinner=False)
-  st.write("✅ loading milvus embedding.")
-
-def _get_milvus_store(_embeddings):
-    # Explicit connection logic
-    if not connections.has_connection("default"):
-        connections.connect(
-            alias="default",
-            uri=st.secrets["ZILLIZ_URI"],
-            token=st.secrets["ZILLIZ_TOKEN"],
-            secure=True,
-            timeout=20
-        )
-    
-    return Milvus(
-        embedding_function=_embeddings,
-        connection_args={"alias": "default"},
-        collection_name="RESUME_SEARCH",
-        # Adding these explicit params prevents the 'Fetching Schema' hang
-        index_params={"metric_type": "L2", "index_type": "IVF_FLAT", "params": {"nlist": 1024}}
-    )
-
-# 2. The LIVE function handles the UI Status
+# --- 3. Connections ---
+@st.cache_resource
 def init_connections():
-    with st.status("🚀 Initializing AI Resume Advocate...", expanded=True) as status:
-        st.write("🔗 Connecting to Gemini Flash...")
-        llm, embeddings = _get_google_services()
-        st.write("✅ Google AI Ready.")
+    try:
+        embeddings = GoogleGenerativeAIEmbeddings(
+            model="gemini-embedding-001", 
+            google_api_key=st.secrets["GOOGLE_API_KEY"]
+        )
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-3-flash-preview", 
+            google_api_key=st.secrets["GOOGLE_API_KEY"],
+            temperature=0.2 
+        )
+        v_store = Milvus(
+            embedding_function=embeddings,
+            connection_args={
+                "uri": st.secrets["ZILLIZ_URI"],
+                "token": st.secrets["ZILLIZ_TOKEN"],
+                "secure": True
+            },
+            collection_name="RESUME_SEARCH"
+        )
+        return v_store, llm
+    except Exception as e:
+        st.error(f"❌ Connection Failed: {e}")
+        st.stop()
 
-        st.write("🔗 Connecting to Zilliz Vector DB...")
-           
-            
-       
-            
-            # Update the status header when finished
-            status.update(label="Milvus Connected!", state="complete", expanded=False)
-            st.toast("Milvus is ready!", icon="🚀")
-        v_store = _get_milvus_store(embeddings)
-        st.write("✅ Vector Database Ready.")
-        
-        status.update(label="🎉 All Systems Online!", state="complete", expanded=False)
-    return v_store, llm
-    
-# Execution
 v_store, llm = init_connections()
 
 # --- 4. THE CLEANER: This prevents the "Unreadable" Metadata ---
