@@ -1,44 +1,38 @@
 import streamlit as st
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_milvus import Milvus
+# CRITICAL: Import connections to fix the ConnectionNotExistException
+from pymilvus import connections 
 
 # --- 1. Page Config ---
-st.set_page_config(page_title="Freddy's skills finder powered by AI", layout="centered")
-st.title("🚀 Freddy's Skill Search powered by AI")
-st.caption("Agentic RAG | Zilliz Cloud | Gemini 3.0 Flash Preview")
+st.set_page_config(page_title="Freddy's skills finder", layout="centered")
+st.title("🚀 Freddy's Skill Search")
 
-# --- 2. Initialization ---
-if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {"role": "assistant", "content": "I am Freddy's Assistant. I've analyzed his 20+ years of experience. How can I help you today?"}
-    ]
-
-# --- 3. Connections ---
+# --- 2. Connections ---
 @st.cache_resource
 def init_connections():
     try:
-        # Check for existence of secrets first to avoid cryptic errors
-        if "GOOGLE_API_KEY" not in st.secrets:
-            st.error("Missing GOOGLE_API_KEY in secrets.")
-            st.stop()
-            
+        # --- FIX: Explicitly establish the global connection first ---
+        # This resolves the <ConnectionNotExistException>
+        connections.connect(
+            alias="default",
+            uri=st.secrets["ZILLIZ_URI"],
+            token=st.secrets["ZILLIZ_TOKEN"],
+            secure=True
+        )
+
         embeddings = GoogleGenerativeAIEmbeddings(
-            model="models/embedding-001", # Updated to standard model path
+            model="models/embedding-001", 
             google_api_key=st.secrets["GOOGLE_API_KEY"]
         )
         
-        # Updated to the specific model you requested
         llm = ChatGoogleGenerativeAI(
             model="gemini-3-flash-preview", 
             google_api_key=st.secrets["GOOGLE_API_KEY"],
             temperature=0.2 
         )
-        
-        # Verify Zilliz secrets
-        if "ZILLIZ_URI" not in st.secrets or "ZILLIZ_TOKEN" not in st.secrets:
-            st.error("Zilliz URI or Token missing. If you deleted your Oracle-based instance, please update these secrets.")
-            st.stop()
 
+        # Now we can initialize the LangChain wrapper
         v_store = Milvus(
             embedding_function=embeddings,
             connection_args={
@@ -46,13 +40,11 @@ def init_connections():
                 "token": st.secrets["ZILLIZ_TOKEN"],
                 "secure": True
             },
-            collection_name="RESUME_SEARCH",
-            drop_old=False # Ensure we don't accidentally wipe data on connect
+            collection_name="RESUME_SEARCH"
         )
         return v_store, llm
     except Exception as e:
         st.error(f"❌ Connection Failed: {e}")
-        st.info("💡 Note: If you recently deleted your Oracle Cloud resources, ensure your ZILLIZ_URI is still valid.")
         st.stop()
 
 v_store, llm = init_connections()
