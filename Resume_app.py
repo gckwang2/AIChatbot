@@ -18,43 +18,46 @@ if "messages" not in st.session_state:
         {"role": "assistant", "content": "I am Freddy's Assistant. I've analyzed his 20+ years of experience. How can I help you today?"}
     ]
 
-# --- 3. Connections ---
 # --- 3. Connections (Stable Version) ---
-@st.cache_resource
+@st.cache_resource(show_spinner="Connecting to Brain & Database...")
 def init_connections():
     try:
-        # Step A: Establish a named global connection
-        # This is more stable than letting LangChain handle it internally
+        # 2. Establish Milvus connection with an explicit TIMEOUT
+        # If Zilliz doesn't respond in 10s, this will stop the hang.
         if not connections.has_connection("default"):
             connections.connect(
                 alias="default",
                 uri=st.secrets["ZILLIZ_URI"],
                 token=st.secrets["ZILLIZ_TOKEN"],
-                secure=True
+                secure=True,
+                timeout=10  # <--- Crucial: stop the infinite hang
             )
-            
+        
+        # 3. Initialize Google Services
         embeddings = GoogleGenerativeAIEmbeddings(
             model="gemini-embedding-001", 
             google_api_key=st.secrets["GOOGLE_API_KEY"]
         )
-        
         llm = ChatGoogleGenerativeAI(
             model="gemini-3-flash-preview", 
             google_api_key=st.secrets["GOOGLE_API_KEY"],
             temperature=0.2 
         )
 
-        # Step B: Point the Vector Store to the "default" alias we just made
+        # 4. Wrap into LangChain
         v_store = Milvus(
             embedding_function=embeddings,
-            connection_args={"alias": "default"}, 
+            connection_args={"alias": "default"},
             collection_name="RESUME_SEARCH"
         )
         return v_store, llm
     except Exception as e:
-        st.error(f"❌ Connection Failed: {e}")
+        # If it fails, we show the error so you aren't stuck staring at a spinner
+        st.error(f"❌ Connection Timeout or Error: {e}")
+        st.info("Check if Zilliz Cloud is 'Paused' or if your IP is whitelisted.")
         st.stop()
 
+# Execution
 v_store, llm = init_connections()
 
 # --- 4. THE CLEANER: This prevents the "Unreadable" Metadata ---
