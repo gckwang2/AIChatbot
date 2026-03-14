@@ -4,51 +4,61 @@ from langchain_milvus import Milvus
 from pymilvus import connections, utility
 
 # --- 1. Page Config ---
-st.set_page_config(page_title="Freddy's Skills Finder", layout="centered")
-st.title("🚀 Freddy's Skill Search")
-st.caption("Agentic RAG | Zilliz Cloud | Gemini 3.0 Flash Preview")
+st.set_page_config(page_title="Freddy's Debugger", layout="centered")
+st.title("🔍 Connection Debugger")
 
-# --- 2. THE GLOBAL CONNECTION (From test-milvus.py) ---
-# This ensures the 'default' connection exists before LangChain ever looks for it.
-def force_milvus_connection():
+# --- 2. DEBUGGER ENGINE ---
+def debug_connection():
+    st.subheader("🛠 Connection Heartbeat")
+    
+    # STAGE 1: Checking Secrets
+    st.write("1️⃣ Checking Streamlit Secrets...")
+    if "ZILLIZ_URI" not in st.secrets or "ZILLIZ_TOKEN" not in st.secrets:
+        st.error("FATAL: Secrets are missing!")
+        st.stop()
+    st.success("Secrets found.")
+
+    # STAGE 2: Pymilvus Handshake
     try:
-        if not connections.has_connection("default"):
-            connections.connect(
-                alias="default",
-                uri=st.secrets["ZILLIZ_URI"],
-                token=st.secrets["ZILLIZ_TOKEN"],
-                secure=True,
-                timeout=30
-            )
-        return True
+        st.write("2️⃣ Attempting `connections.connect`...")
+        connections.connect(
+            alias="default",
+            uri=st.secrets["ZILLIZ_URI"],
+            token=st.secrets["ZILLIZ_TOKEN"],
+            secure=True
+        )
+        st.success("`connections.connect` completed without error.")
     except Exception as e:
-        st.error(f"❌ Milvus Global Connection Failed: {e}")
-        return False
+        st.error(f"FAIL at Stage 2: {e}")
+        st.stop()
 
-# Run the connection check immediately
-if not force_milvus_connection():
-    st.stop()
-
-# --- 3. Initialization & Caching ---
-@st.cache_resource
-def init_models():
+    # STAGE 3: Utility Check
     try:
-        # Verify collection exists (Sanity check from test script)
-        if not utility.has_collection("RESUME_SEARCH"):
-            st.error("❌ Collection 'RESUME_SEARCH' not found in Zilliz.")
-            st.stop()
+        st.write("3️⃣ Verifying collection existence with `utility.has_collection`...")
+        exists = utility.has_collection("RESUME_SEARCH")
+        if exists:
+            st.success("Collection 'RESUME_SEARCH' verified.")
+        else:
+            st.warning("Collection not found, but connection is alive.")
+    except Exception as e:
+        st.error(f"FAIL at Stage 3: {e}")
+        st.stop()
 
+    # STAGE 4: Embeddings Initialization
+    try:
+        st.write("4️⃣ Initializing Google Embeddings...")
         embeddings = GoogleGenerativeAIEmbeddings(
             model="models/embedding-001",
             google_api_key=st.secrets["GOOGLE_API_KEY"]
         )
-        
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-3-flash-preview",
-            google_api_key=st.secrets["GOOGLE_API_KEY"],
-            temperature=0.2
-        )
+        st.success("Embeddings ready.")
+    except Exception as e:
+        st.error(f"FAIL at Stage 4: {e}")
+        st.stop()
 
+    # STAGE 5: The "Killer" Line - LangChain Milvus Wrapper
+    try:
+        st.write("5️⃣ Initializing LangChain `Milvus` vector store...")
         v_store = Milvus(
             embedding_function=embeddings,
             connection_args={
@@ -58,12 +68,29 @@ def init_models():
             },
             collection_name="RESUME_SEARCH"
         )
-        return v_store, llm
+        st.success("🎉 LangChain Milvus Wrapper Initialized Successfully!")
+        return v_store
     except Exception as e:
-        st.error(f"❌ Model Initialization Failed: {e}")
+        st.error(f"FAIL at Stage 5: {e}")
+        st.info("This is where the 'should create connection first' usually happens.")
         st.stop()
 
-v_store, llm = init_models()
+# --- 3. Run Debugger ---
+# Note: We are NOT using @st.cache_resource here so we can see it run every time
+v_store = debug_connection()
+
+# --- 4. LLM Load ---
+@st.cache_resource
+def load_llm():
+    return ChatGoogleGenerativeAI(
+        model="gemini-3-flash-preview",
+        google_api_key=st.secrets["GOOGLE_API_KEY"]
+    )
+
+llm = load_llm()
+
+st.divider()
+st.write("✅ If you see this, the entire connection stack is healthy.")
 
 # Initialize Chat History
 if "messages" not in st.session_state:
