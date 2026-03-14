@@ -2,6 +2,7 @@ import streamlit as st
 import nest_asyncio
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_milvus import Milvus
+from pymilvus import connections
 
 # --- 1. Page Config ---
 # This must run before ANY other imports or logic to prevent the "oven" hang.
