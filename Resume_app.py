@@ -1,6 +1,5 @@
 import streamlit as st
 import nest_asyncio
-import os
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_milvus import Milvus
 from pymilvus import connections
@@ -13,22 +12,26 @@ st.set_page_config(page_title="Freddy's skills finder powered by AI", layout="ce
 st.title("🚀 Freddy's Skill Search powered by AI")
 st.caption("Agentic RAG | Zilliz Cloud | Gemini 3.0 Flash Preview")
 
-# --- 3. Connections (Optimized & Sequential) ---
+# --- 3. Persistent Resources (LLM Only) ---
 
 @st.cache_resource(show_spinner=False)
 def get_llm():
-    """Initializes the Gemini LLM."""
+    """Gemini initialization usually doesn't deadlock, so we cache it."""
     return ChatGoogleGenerativeAI(
         model="gemini-3-flash-preview", 
         google_api_key=st.secrets["GOOGLE_API_KEY"],
         temperature=0.2 
     )
 
-@st.cache_resource(show_spinner=False)
-def get_vector_store():
-    st.write("🔍 Diagnostic: Entering get_vector_store...")
+def get_vector_store_safe():
+    """
+    On-Demand Initialization. 
+    This runs every time a query is made, but Milvus handle is lightweight 
+    once the connection is established.
+    """
+    st.write("🔍 Diagnostic: Entering get_vector_store_safe...")
     
-    # Check 1: Connection
+    # Check 1: Core Connection
     if not connections.has_connection("default"):
         st.write("📡 Diagnostic: Establishing Zilliz Connection...")
         connections.connect(
@@ -39,6 +42,8 @@ def get_vector_store():
             timeout=60
         )
         st.write("✅ Diagnostic: Zilliz Connected.")
+    else:
+        st.write("🟢 Diagnostic: Reusing existing Zilliz connection.")
     
     # Check 2: Embeddings
     st.write("🔢 Diagnostic: Initializing Google Embeddings...")
@@ -46,53 +51,44 @@ def get_vector_store():
         model="gemini-embedding-001", 
         google_api_key=st.secrets["GOOGLE_API_KEY"]
     )
-    st.write("✅ Diagnostic: Embeddings Initialized.")
     
-    # Check 3: The Object Wrap
-    st.write("📦 Diagnostic: Creating Milvus Vector Store Object...")
+    # Check 3: Object Creation (The previous hang point)
+    st.write("📦 Diagnostic: Wrapping Milvus Object...")
     vstore = Milvus(
         embedding_function=embeddings,
         connection_args={"alias": "default"},
         collection_name="RESUME_SEARCH",
         search_params={"metric_type": "L2", "params": {"nprobe": 10}}
     )
-    st.write("✅ Diagnostic: Milvus Object Created.")
+    st.write("✅ Diagnostic: Vector Store Ready.")
     return vstore
 
-# --- 4. System Initialization (The Sequential Flow) ---
+# --- 4. Initialization ---
 if "messages" not in st.session_state:
     st.session_state.messages = [
         {"role": "assistant", "content": "I am Freddy's Assistant. I've analyzed his 20+ years of experience. How can I help you today?"}
     ]
 
-# Instead of hiding everything in a cache, we run it step-by-step
+# Only start the LLM at boot
 with st.status("🚀 Awakening Freddy's Career Advocate...", expanded=True) as status:
     try:
         st.write("📡 Connecting to Google AI...")
         llm = get_llm()
-        
-        st.write("🗄️ Mounting Zilliz Vector Database...")
-        v_store = get_vector_store()
-        
-        status.update(label="✅ All Systems Online", state="complete", expanded=False)
+        status.update(label="✅ Systems Online", state="complete", expanded=False)
     except Exception as e:
-        status.update(label="❌ Connection Failed", state="error")
         st.error(f"Initialization Error: {e}")
         st.stop()
 
 # --- 5. THE CLEANER ---
 def extract_clean_text(response):
-    """Specifically designed to handle Gemini's complex dictionary outputs."""
     if hasattr(response, 'content'):
         content = response.content
     else:
         content = response
-
     if isinstance(content, list):
         if len(content) > 0 and isinstance(content[0], dict):
             return content[0].get('text', str(content[0]))
         return " ".join([str(i) for i in content])
-    
     return str(content)
 
 # --- 6. Display History ---
@@ -117,8 +113,16 @@ if prompt := st.chat_input("Ask about Freddy's potential..."):
 
         # PHASE 2: Execution (Tool Use)
         accumulated_context = []
-        retriever = v_store.as_retriever(search_kwargs={"k": 5})
         
+        # --- NEW SAFE LOADING BLOCK ---
+        try:
+            v_store = get_vector_store_safe()
+            retriever = v_store.as_retriever(search_kwargs={"k": 5})
+        except Exception as e:
+            st.error(f"Failed to mount database: {e}")
+            st.stop()
+        # ------------------------------
+
         for topic in search_topics:
             with st.spinner(f"🔍 Searching for: {topic}..."):
                 docs = retriever.invoke(topic)
@@ -129,21 +133,13 @@ if prompt := st.chat_input("Ask about Freddy's potential..."):
         
         final_agent_prompt = f"""
                 ROLE: You are Freddy Goh's "Career Advocate." 
-                INSTRUCTION: Analyze the resume context. Look for transferable skills and logical overlaps. 
-               
-        CONTEXT: {context_str}
-        USER QUESTION: {prompt}
-        
-        TASK:
-        Use the context to provide a professional, persuasive response. 
-        Focus on metrics, seniority (23+ years), and leadership. 
-        If a skill isn't explicitly listed, infer the related skills found in the resume. 
-        Do not show any metadata, JSON, or technical signatures.
+                CONTEXT: {context_str}
+                USER QUESTION: {prompt}
+                TASK: Use context to provide a professional, persuasive response. Do not return "Career Advocate" or technical signatures.
         """
 
         with st.spinner("⚖️ Synthesizing recommendation..."):
             final_res = llm.invoke(final_agent_prompt)
             answer = extract_clean_text(final_res)
-            
             st.markdown(answer)
             st.session_state.messages.append({"role": "assistant", "content": answer})
