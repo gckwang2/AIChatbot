@@ -20,7 +20,7 @@ if "messages" not in st.session_state:
 
 # --- 3. Connections (Stable Version) ---
 @st.cache_resource(show_spinner="Connecting to Brain & Database...")
-@st.cache_resource(show_spinner=False)
+
 def _get_google_services():
     llm = ChatGoogleGenerativeAI(
         model="gemini-3-flash-preview", 
