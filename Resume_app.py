@@ -1,8 +1,8 @@
 import streamlit as st
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_milvus import Milvus
-# CRITICAL: Import connections to fix the ConnectionNotExistException
-from pymilvus import connections 
+# IMPORT: This is the key to managing the connection list manually
+from pymilvus import connections, utility
 
 # --- 1. Page Config ---
 st.set_page_config(page_title="Freddy's skills finder", layout="centered")
@@ -12,14 +12,18 @@ st.title("🚀 Freddy's Skill Search")
 @st.cache_resource
 def init_connections():
     try:
-        # --- FIX: Explicitly establish the global connection first ---
-        # This resolves the <ConnectionNotExistException>
-        connections.connect(
-            alias="default",
-            uri=st.secrets["ZILLIZ_URI"],
-            token=st.secrets["ZILLIZ_TOKEN"],
-            secure=True
-        )
+        # 1. Check if "default" connection already exists to prevent redundant calls
+        if not connections.has_connection("default"):
+            connections.connect(
+                alias="default",
+                uri=st.secrets["ZILLIZ_URI"],
+                token=st.secrets["ZILLIZ_TOKEN"],
+                secure=True
+            )
+        
+        # 2. Verify if the collection actually exists (helps debug deleted databases)
+        if not utility.has_collection("RESUME_SEARCH"):
+            st.warning("⚠️ 'RESUME_SEARCH' collection not found in Zilliz. Please check your collection name.")
 
         embeddings = GoogleGenerativeAIEmbeddings(
             model="models/embedding-001", 
@@ -32,7 +36,7 @@ def init_connections():
             temperature=0.2 
         )
 
-        # Now we can initialize the LangChain wrapper
+        # 3. Initialize Milvus with the active connection
         v_store = Milvus(
             embedding_function=embeddings,
             connection_args={
@@ -45,8 +49,10 @@ def init_connections():
         return v_store, llm
     except Exception as e:
         st.error(f"❌ Connection Failed: {e}")
+        st.info("💡 Tip: If you are using Zilliz Cloud, ensure your URI includes the port (usually :443) and your token is current.")
         st.stop()
 
+# Run the connection
 v_store, llm = init_connections()
 
 # --- 4. THE CLEANER ---
