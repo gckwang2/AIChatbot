@@ -1,8 +1,12 @@
 import streamlit as st
+import nest_asyncio
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_milvus import Milvus
 
 # --- 1. Page Config ---
+# This must run before ANY other imports or logic to prevent the "oven" hang.
+nest_asyncio.apply()
+
 st.set_page_config(page_title="Freddy's skills finder powered by AI", layout="centered")
 st.title("🚀 Freddy's Skill Search powered by AI")
 st.caption("Agentic RAG | Zilliz Cloud | Gemini 3.0 Flash Preview")
@@ -14,25 +18,35 @@ if "messages" not in st.session_state:
     ]
 
 # --- 3. Connections ---
+# --- 3. Connections (Stable Version) ---
 @st.cache_resource
 def init_connections():
     try:
+        # Step A: Establish a named global connection
+        # This is more stable than letting LangChain handle it internally
+        if not connections.has_connection("default"):
+            connections.connect(
+                alias="default",
+                uri=st.secrets["ZILLIZ_URI"],
+                token=st.secrets["ZILLIZ_TOKEN"],
+                secure=True
+            )
+            
         embeddings = GoogleGenerativeAIEmbeddings(
             model="gemini-embedding-001", 
             google_api_key=st.secrets["GOOGLE_API_KEY"]
         )
+        
         llm = ChatGoogleGenerativeAI(
             model="gemini-3-flash-preview", 
             google_api_key=st.secrets["GOOGLE_API_KEY"],
             temperature=0.2 
         )
+
+        # Step B: Point the Vector Store to the "default" alias we just made
         v_store = Milvus(
             embedding_function=embeddings,
-            connection_args={
-                "uri": st.secrets["ZILLIZ_URI"],
-                "token": st.secrets["ZILLIZ_TOKEN"],
-                "secure": True
-            },
+            connection_args={"alias": "default"}, 
             collection_name="RESUME_SEARCH"
         )
         return v_store, llm
