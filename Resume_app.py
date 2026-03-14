@@ -9,10 +9,13 @@ st.set_page_config(page_title="Freddy's skills finder", layout="centered")
 st.title("🚀 Freddy's Skill Search")
 
 # --- 2. Connections ---
+from pymilvus import connections, utility # Import these!
+
 @st.cache_resource
 def init_connections():
     try:
-        # 1. Check if "default" connection already exists to prevent redundant calls
+        # 1. THE FIX: Force a global connection for this session
+        # If we don't do this, LangChain's Milvus wrapper will say "connection not exist"
         if not connections.has_connection("default"):
             connections.connect(
                 alias="default",
@@ -21,10 +24,12 @@ def init_connections():
                 secure=True
             )
         
-        # 2. Verify if the collection actually exists (helps debug deleted databases)
+        # 2. Check if the specific collection exists
         if not utility.has_collection("RESUME_SEARCH"):
-            st.warning("⚠️ 'RESUME_SEARCH' collection not found in Zilliz. Please check your collection name.")
+            st.error("❌ Collection 'RESUME_SEARCH' not found. Check your Zilliz dashboard.")
+            st.stop()
 
+        # 3. Initialize your models
         embeddings = GoogleGenerativeAIEmbeddings(
             model="models/embedding-001", 
             google_api_key=st.secrets["GOOGLE_API_KEY"]
@@ -36,7 +41,7 @@ def init_connections():
             temperature=0.2 
         )
 
-        # 3. Initialize Milvus with the active connection
+        # 4. Initialize LangChain Milvus (it will now find the "default" connection)
         v_store = Milvus(
             embedding_function=embeddings,
             connection_args={
@@ -49,9 +54,7 @@ def init_connections():
         return v_store, llm
     except Exception as e:
         st.error(f"❌ Connection Failed: {e}")
-        st.info("💡 Tip: If you are using Zilliz Cloud, ensure your URI includes the port (usually :443) and your token is current.")
         st.stop()
-
 # Run the connection
 v_store, llm = init_connections()
 
