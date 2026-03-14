@@ -20,62 +20,53 @@ if "messages" not in st.session_state:
 
 # --- 3. Connections (Stable Version) ---
 @st.cache_resource(show_spinner="Connecting to Brain & Database...")
+@st.cache_resource(show_spinner=False)
+def _get_google_services():
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-3-flash-preview", 
+        google_api_key=st.secrets["GOOGLE_API_KEY"],
+        temperature=0.2 
+    )
+    embeddings = GoogleGenerativeAIEmbeddings(
+        model="gemini-embedding-001", 
+        google_api_key=st.secrets["GOOGLE_API_KEY"]
+    )
+    return llm, embeddings
+
+@st.cache_resource(show_spinner=False)
+def _get_milvus_store(_embeddings):
+    # Explicit connection logic
+    if not connections.has_connection("default"):
+        connections.connect(
+            alias="default",
+            uri=st.secrets["ZILLIZ_URI"],
+            token=st.secrets["ZILLIZ_TOKEN"],
+            secure=True,
+            timeout=20
+        )
+    
+    return Milvus(
+        embedding_function=_embeddings,
+        connection_args={"alias": "default"},
+        collection_name="RESUME_SEARCH",
+        # Adding these explicit params prevents the 'Fetching Schema' hang
+        index_params={"metric_type": "L2", "index_type": "IVF_FLAT", "params": {"nlist": 1024}}
+    )
+
+# 2. The LIVE function handles the UI Status
 def init_connections():
-    try:
-        # STEP 1: Google LLM & Embeddings
-         st.subheader("1. Google LLM (gemini-3-flash-preview)")
-        with st.status("📡 Connecting to Google AI Services...", expanded=True) as status:
-            st.write("Initializing Gemini Flash...")
-            llm = ChatGoogleGenerativeAI(
-                model="gemini-3-flash-preview", 
-                google_api_key=st.secrets["GOOGLE_API_KEY"],
-                temperature=0.2 
-            )
-                st.subheader("1. Google embedding (gemini-embedding-001)")
-            st.write("Initializing Gemini Embeddings...")
-            embeddings = GoogleGenerativeAIEmbeddings(
-                model="gemini-embedding-001", 
-                google_api_key=st.secrets["GOOGLE_API_KEY"]
-            )
-            status.update(label="✅ Google Services Ready!", state="complete")
+    with st.status("🚀 Initializing AI Resume Advocate...", expanded=True) as status:
+        st.write("🔗 Connecting to Gemini Flash...")
+        llm, embeddings = _get_google_services()
+        st.write("✅ Google AI Ready.")
 
-        # STEP 2: Milvus/Zilliz Networking
-        with st.status("🗄️ Connecting to Zilliz Vector DB...", expanded=True) as status:
-            if not connections.has_connection("default"):
-                st.write(f"Attempting handshake with {st.secrets['ZILLIZ_URI'][:15]}...")
-                connections.connect(
-                    alias="default",
-                    uri=st.secrets["ZILLIZ_URI"],
-                    token=st.secrets["ZILLIZ_TOKEN"],
-                    secure=True,
-                    timeout=15 # Prevents infinite spinning
-                )
-            status.update(label="✅ Zilliz Connection Established!", state="complete")
-
-      # STEP 3: Vector Store (Optimized for Streamlit Cloud)
-        with st.status("🛠️ Finalizing RAG Pipeline...", expanded=True) as status:
-            # We add 'index_params' and 'search_params' explicitly to avoid background auto-discovery hangs
-            v_store = Milvus(
-                embedding_function=embeddings,
-                connection_args={
-                    "alias": "default",
-                    # Added a longer network timeout for the handshake
-                    "timeout": 30 
-                },
-                collection_name="RESUME_SEARCH",
-                # This prevents Milvus from hanging during the "load" check
-                index_params={"metric_type": "L2", "index_type": "IVF_FLAT", "params": {"nlist": 1024}},
-                search_params={"metric_type": "L2", "params": {"nprobe": 10}}
-            )
-            status.update(label="🚀 System Fully Operational!", state="complete")
-            
-        return v_store, llm
-
-    except Exception as e:
-        st.error(f"❌ Critical Failure: {e}")
-        st.info("Check your Zilliz Cloud dashboard to ensure the cluster is not 'Paused'.")
-        st.stop()
-
+        st.write("🔗 Connecting to Zilliz Vector DB...")
+        v_store = _get_milvus_store(embeddings)
+        st.write("✅ Vector Database Ready.")
+        
+        status.update(label="🎉 All Systems Online!", state="complete", expanded=False)
+    return v_store, llm
+    
 # Execution
 v_store, llm = init_connections()
 
