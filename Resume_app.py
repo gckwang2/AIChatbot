@@ -23,6 +23,7 @@ if "messages" not in st.session_state:
 def init_connections():
     try:
         # STEP 1: Google LLM & Embeddings
+         st.subheader("1. Google LLM (gemini-3-flash-preview)")
         with st.status("📡 Connecting to Google AI Services...", expanded=True) as status:
             st.write("Initializing Gemini Flash...")
             llm = ChatGoogleGenerativeAI(
@@ -30,7 +31,7 @@ def init_connections():
                 google_api_key=st.secrets["GOOGLE_API_KEY"],
                 temperature=0.2 
             )
-            
+                st.subheader("1. Google embedding (gemini-embedding-001)")
             st.write("Initializing Gemini Embeddings...")
             embeddings = GoogleGenerativeAIEmbeddings(
                 model="gemini-embedding-001", 
