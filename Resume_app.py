@@ -17,15 +17,28 @@ if "messages" not in st.session_state:
 @st.cache_resource
 def init_connections():
     try:
+        # Check for existence of secrets first to avoid cryptic errors
+        if "GOOGLE_API_KEY" not in st.secrets:
+            st.error("Missing GOOGLE_API_KEY in secrets.")
+            st.stop()
+            
         embeddings = GoogleGenerativeAIEmbeddings(
-            model="gemini-embedding-001", 
+            model="models/embedding-001", # Updated to standard model path
             google_api_key=st.secrets["GOOGLE_API_KEY"]
         )
+        
+        # Updated to the specific model you requested
         llm = ChatGoogleGenerativeAI(
             model="gemini-3-flash-preview", 
             google_api_key=st.secrets["GOOGLE_API_KEY"],
             temperature=0.2 
         )
+        
+        # Verify Zilliz secrets
+        if "ZILLIZ_URI" not in st.secrets or "ZILLIZ_TOKEN" not in st.secrets:
+            st.error("Zilliz URI or Token missing. If you deleted your Oracle-based instance, please update these secrets.")
+            st.stop()
+
         v_store = Milvus(
             embedding_function=embeddings,
             connection_args={
@@ -33,32 +46,30 @@ def init_connections():
                 "token": st.secrets["ZILLIZ_TOKEN"],
                 "secure": True
             },
-            collection_name="RESUME_SEARCH"
+            collection_name="RESUME_SEARCH",
+            drop_old=False # Ensure we don't accidentally wipe data on connect
         )
         return v_store, llm
     except Exception as e:
         st.error(f"❌ Connection Failed: {e}")
+        st.info("💡 Note: If you recently deleted your Oracle Cloud resources, ensure your ZILLIZ_URI is still valid.")
         st.stop()
 
 v_store, llm = init_connections()
 
-# --- 4. THE CLEANER: This prevents the "Unreadable" Metadata ---
+# --- 4. THE CLEANER ---
 def extract_clean_text(response):
     """Specifically designed to handle Gemini's complex dictionary outputs."""
-    # Check if it's a standard LangChain Message object
     if hasattr(response, 'content'):
         content = response.content
     else:
         content = response
 
-    # If the content is a list (this is what happened in your last error)
     if isinstance(content, list):
-        # Look for the 'text' key inside the first dictionary of the list
         if len(content) > 0 and isinstance(content[0], dict):
             return content[0].get('text', str(content[0]))
         return " ".join([str(i) for i in content])
     
-    # If it's already a string, just return it
     return str(content)
 
 # --- 5. Display History ---
@@ -81,21 +92,25 @@ if prompt := st.chat_input("Ask about Freddy's potential..."):
             clean_plan = extract_clean_text(plan_res)
             search_topics = [t.strip() for t in clean_plan.split("\n") if t.strip()][:3]
 
-        # --- PHASE 2: Execution (Tool Use) ---
+        # --- PHASE 2: Execution ---
         accumulated_context = []
-        retriever = v_store.as_retriever(search_kwargs={"k": 5})
-        
-        for topic in search_topics:
-            with st.spinner(f"🔍 Searching for: {topic}..."):
-                docs = retriever.invoke(topic)
-                accumulated_context.extend([d.page_content for d in docs])
+        # Error handling for the retriever in case the collection is empty/missing
+        try:
+            retriever = v_store.as_retriever(search_kwargs={"k": 5})
+            
+            for topic in search_topics:
+                with st.spinner(f"🔍 Searching for: {topic}..."):
+                    docs = retriever.invoke(topic)
+                    accumulated_context.extend([d.page_content for d in docs])
+        except Exception as e:
+            st.warning(f"Search failed: {e}. I will proceed with my general knowledge of Freddy.")
 
         # --- PHASE 3: Synthesis & Advocacy ---
-        context_str = "\n\n".join(list(set(accumulated_context)))
+        context_str = "\n\n".join(list(set(accumulated_context))) if accumulated_context else "No specific resume context found."
         
         final_agent_prompt = f"""
-                ROLE: You are Freddy Goh's "Career Advocate." 
-                INSTRUCTION: Analyze the resume context. Look for transferable skills and logical overlaps. 
+        ROLE: You are Freddy Goh's "Career Advocate." 
+        INSTRUCTION: Analyze the resume context. Look for transferable skills and logical overlaps. 
                
         CONTEXT: {context_str}
         USER QUESTION: {prompt}
@@ -103,13 +118,13 @@ if prompt := st.chat_input("Ask about Freddy's potential..."):
         TASK:
         Use the context to provide a professional, persuasive response. 
         Focus on metrics, seniority (23+ years), and leadership. 
-        If a skill isn't explicitly listed, infer the related skills found in the resume,and use his previous experience based on his senior level. Do not return "Career Advocate" in the return response.
+        If a skill isn't explicitly listed, infer the related skills found in the resume, and use his previous experience based on his senior level. 
+        Do not return "Career Advocate" in the return response.
         Do not show any metadata, JSON, or technical signatures.
         """
 
         with st.spinner("⚖️ Synthesizing recommendation..."):
             final_res = llm.invoke(final_agent_prompt)
-            # Use the cleaner again for the final output
             answer = extract_clean_text(final_res)
             
             st.markdown(answer)
