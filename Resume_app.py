@@ -2,7 +2,7 @@ import streamlit as st
 import nest_asyncio
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_milvus import Milvus
-from pymilvus import connections
+from pymilvus import connections, utility
 
 # --- 1. Page Config ---
 # This must run before ANY other imports or logic to prevent the "oven" hang.
@@ -61,6 +61,15 @@ def init_connections():
         st.write("✅ Google AI Ready.")
 
         st.write("🔗 Connecting to Zilliz Vector DB...")
+           
+            
+            # List collections to verify access
+            collections = utility.list_collections()
+            st.write(f"📂 Found collections: {collections}")
+            
+            # Update the status header when finished
+            status.update(label="Milvus Connected!", state="complete", expanded=False)
+            st.toast("Milvus is ready!", icon="🚀")
         v_store = _get_milvus_store(embeddings)
         st.write("✅ Vector Database Ready.")
         
