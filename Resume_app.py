@@ -24,42 +24,53 @@ def get_llm():
     )
 
 def get_vector_store_safe():
-    from pymilvus import connections, MilvusClient
-    
+    from pymilvus import MilvusClient
     st.write("🔍 Diagnostic: Entering get_vector_store_safe...")
     
-    # 1. Establish the connection once and for all
-    if not connections.has_connection("default"):
-        connections.connect(
-            alias="default",
-            uri=st.secrets["ZILLIZ_URI"],
-            token=st.secrets["ZILLIZ_TOKEN"],
-            secure=True,
-            timeout=120  # Double the timeout for Frankfurt latency
-        )
+    # Use the official client directly
+    client = MilvusClient(
+        uri=st.secrets["ZILLIZ_URI"],
+        token=st.secrets["ZILLIZ_TOKEN"]
+    )
+    st.write("✅ Diagnostic: MilvusClient Connected.")
+    return client
+
+# --- PHASE 2: Execution (Direct Tool Use) ---
+accumulated_context = []
+
+try:
+    # 1. Get the raw client
+    client = get_vector_store_safe()
     
-    # 2. Setup Embeddings
-    embeddings = GoogleGenerativeAIEmbeddings(
+    # 2. Get embeddings model
+    embeddings_model = GoogleGenerativeAIEmbeddings(
         model="gemini-embedding-001", 
         google_api_key=st.secrets["GOOGLE_API_KEY"]
     )
-    
-    # 3. Use the 'from_existing_collection' method 
-    # This is much faster and avoids the 'auto-handshake' hang
-    st.write("📦 Diagnostic: Attaching to Existing Collection...")
-    vstore = Milvus(
-        embedding_function=embeddings,
-        collection_name="RESUME_SEARCH",
-        connection_args={
-            "uri": st.secrets["ZILLIZ_URI"],
-            "token": st.secrets["ZILLIZ_TOKEN"],
-            "secure": True
-        }
-    )
-    
-    st.write("✅ Diagnostic: Vector Store Ready.")
-    return vstore
 
+    for topic in search_topics:
+        with st.spinner(f"🔍 Searching for: {topic}..."):
+            # 3. Generate the vector manually
+            query_vector = embeddings_model.embed_query(topic)
+            
+            # 4. Search directly using MilvusClient
+            results = client.search(
+                collection_name="RESUME_SEARCH",
+                data=[query_vector],
+                limit=5,
+                output_fields=["text"] # Make sure this matches your 'text' field name
+            )
+            
+            # 5. Extract text from the results
+            for hit in results[0]:
+                accumulated_context.append(hit['entity']['text'])
+                
+    st.success("✅ Search completed successfully.")
+
+except Exception as e:
+    st.error(f"Manual Search Error: {e}")
+    st.stop()
+    
 # --- 4. Initialization ---
 if "messages" not in st.session_state:
     st.session_state.messages = [
