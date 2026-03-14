@@ -41,9 +41,9 @@ try:
         st.success(f"Response: {clean_output(llm_response)}")
 
     # TEST 2: Embeddings (The Vector Engine)
-    st.subheader("2. Testing Embeddings (models/embedding-001)")
+    st.subheader("2. Testing Embeddings (gemini-embedding-001)")
     embeddings = GoogleGenerativeAIEmbeddings(
-        model="models/embedding-001",
+        model="gemini-embedding-001",
         google_api_key=st.secrets["GOOGLE_API_KEY"]
     )
     
