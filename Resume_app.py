@@ -51,12 +51,20 @@ def init_connections():
                 )
             status.update(label="✅ Zilliz Connection Established!", state="complete")
 
-        # STEP 3: Vector Store Wrapping
+      # STEP 3: Vector Store (Optimized for Streamlit Cloud)
         with st.status("🛠️ Finalizing RAG Pipeline...", expanded=True) as status:
+            # We add 'index_params' and 'search_params' explicitly to avoid background auto-discovery hangs
             v_store = Milvus(
                 embedding_function=embeddings,
-                connection_args={"alias": "default"},
-                collection_name="RESUME_SEARCH"
+                connection_args={
+                    "alias": "default",
+                    # Added a longer network timeout for the handshake
+                    "timeout": 30 
+                },
+                collection_name="RESUME_SEARCH",
+                # This prevents Milvus from hanging during the "load" check
+                index_params={"metric_type": "L2", "index_type": "IVF_FLAT", "params": {"nlist": 1024}},
+                search_params={"metric_type": "L2", "params": {"nprobe": 10}}
             )
             status.update(label="🚀 System Fully Operational!", state="complete")
             
