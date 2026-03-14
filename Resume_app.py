@@ -19,7 +19,7 @@ if "messages" not in st.session_state:
     ]
 
 # --- 3. Connections (Stable Version) ---
-@st.cache_resource(show_spinner=False) # Turn off the main silent spinner
+@st.cache_resource(show_spinner="Connecting to Brain & Database...")
 def init_connections():
     try:
         # STEP 1: Google LLM & Embeddings
