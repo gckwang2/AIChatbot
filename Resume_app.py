@@ -19,42 +19,52 @@ if "messages" not in st.session_state:
     ]
 
 # --- 3. Connections (Stable Version) ---
-@st.cache_resource(show_spinner="Connecting to Brain & Database...")
+@st.cache_resource(show_spinner=False) # Turn off the main silent spinner
 def init_connections():
     try:
-        # 2. Establish Milvus connection with an explicit TIMEOUT
-        # If Zilliz doesn't respond in 10s, this will stop the hang.
-        if not connections.has_connection("default"):
-            connections.connect(
-                alias="default",
-                uri=st.secrets["ZILLIZ_URI"],
-                token=st.secrets["ZILLIZ_TOKEN"],
-                secure=True,
-                timeout=10  # <--- Crucial: stop the infinite hang
+        # STEP 1: Google LLM & Embeddings
+        with st.status("📡 Connecting to Google AI Services...", expanded=True) as status:
+            st.write("Initializing Gemini Flash...")
+            llm = ChatGoogleGenerativeAI(
+                model="gemini-3-flash-preview", 
+                google_api_key=st.secrets["GOOGLE_API_KEY"],
+                temperature=0.2 
             )
-        
-        # 3. Initialize Google Services
-        embeddings = GoogleGenerativeAIEmbeddings(
-            model="gemini-embedding-001", 
-            google_api_key=st.secrets["GOOGLE_API_KEY"]
-        )
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-3-flash-preview", 
-            google_api_key=st.secrets["GOOGLE_API_KEY"],
-            temperature=0.2 
-        )
+            
+            st.write("Initializing Gemini Embeddings...")
+            embeddings = GoogleGenerativeAIEmbeddings(
+                model="gemini-embedding-001", 
+                google_api_key=st.secrets["GOOGLE_API_KEY"]
+            )
+            status.update(label="✅ Google Services Ready!", state="complete")
 
-        # 4. Wrap into LangChain
-        v_store = Milvus(
-            embedding_function=embeddings,
-            connection_args={"alias": "default"},
-            collection_name="RESUME_SEARCH"
-        )
+        # STEP 2: Milvus/Zilliz Networking
+        with st.status("🗄️ Connecting to Zilliz Vector DB...", expanded=True) as status:
+            if not connections.has_connection("default"):
+                st.write(f"Attempting handshake with {st.secrets['ZILLIZ_URI'][:15]}...")
+                connections.connect(
+                    alias="default",
+                    uri=st.secrets["ZILLIZ_URI"],
+                    token=st.secrets["ZILLIZ_TOKEN"],
+                    secure=True,
+                    timeout=15 # Prevents infinite spinning
+                )
+            status.update(label="✅ Zilliz Connection Established!", state="complete")
+
+        # STEP 3: Vector Store Wrapping
+        with st.status("🛠️ Finalizing RAG Pipeline...", expanded=True) as status:
+            v_store = Milvus(
+                embedding_function=embeddings,
+                connection_args={"alias": "default"},
+                collection_name="RESUME_SEARCH"
+            )
+            status.update(label="🚀 System Fully Operational!", state="complete")
+            
         return v_store, llm
+
     except Exception as e:
-        # If it fails, we show the error so you aren't stuck staring at a spinner
-        st.error(f"❌ Connection Timeout or Error: {e}")
-        st.info("Check if Zilliz Cloud is 'Paused' or if your IP is whitelisted.")
+        st.error(f"❌ Critical Failure: {e}")
+        st.info("Check your Zilliz Cloud dashboard to ensure the cluster is not 'Paused'.")
         st.stop()
 
 # Execution
