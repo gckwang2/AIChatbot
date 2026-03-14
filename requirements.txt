@@ -14,3 +14,4 @@ langchain-groq
 langchain-openai
 langchain-milvus
 langchain>=0.3.0
+nest-asyncio
