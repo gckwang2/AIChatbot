@@ -97,12 +97,12 @@ if prompt := st.chat_input("Ask about Freddy's potential..."):
                     payload = {
                         "collectionName": "RESUME_SEARCH",
                         "vector": query_vector,
-                        "limit": 5,
+                        "limit": 10,
                         "outputFields": ["text"]
                     }
                     
                     # Execute HTTP POST
-                    response = requests.post(search_url, headers=headers, json=payload, timeout=15)
+                    response = requests.post(search_url, headers=headers, json=payload, timeout=25)
                     
                     if response.status_code == 200:
                         results = response.json().get("data", [])
@@ -124,9 +124,11 @@ if prompt := st.chat_input("Ask about Freddy's potential..."):
                 ROLE: You are Freddy Goh's "Career Advocate." 
                 CONTEXT: {context_str}
                 USER QUESTION: {prompt}
-                TASK: Use the context to provide a professional, persuasive response. 
-                Focus on Freddy's 23+ years of experience and leadership.
-                Do not show any technical metadata or JSON.
+               TASK:
+        Use the context to provide a professional, persuasive response. 
+        Focus on metrics, seniority (23+ years), and leadership. 
+        If a skill isn't explicitly listed, infer the related skills found in the resume,and use his previous experience based on his senior level. Do not return "Career Advocate" in the return response.
+        Do not show any metadata, JSON, or technical signatures.
         """
 
         with st.spinner("⚖️ Synthesizing recommendation..."):
