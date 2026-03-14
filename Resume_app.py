@@ -1,93 +1,31 @@
-import streamlit as st
 import nest_asyncio
-from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
-from langchain_milvus import Milvus
-from pymilvus import connections
-
-# 1. Critical for Streamlit + gRPC (Milvus)
 nest_asyncio.apply()
+import streamlit as st
+from pymilvus import MilvusClient
+from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 
-# --- 2. Page Config ---
+# --- 1. Page Config ---
 st.set_page_config(page_title="Freddy's skills finder powered by AI", layout="centered")
 st.title("🚀 Freddy's Skill Search powered by AI")
 st.caption("Agentic RAG | Zilliz Cloud | Gemini 3.0 Flash Preview")
 
-# --- 3. Persistent Resources (LLM Only) ---
-
+# --- 2. Persistent Resources ---
 @st.cache_resource(show_spinner=False)
 def get_llm():
-    """Gemini initialization usually doesn't deadlock, so we cache it."""
     return ChatGoogleGenerativeAI(
         model="gemini-3-flash-preview", 
         google_api_key=st.secrets["GOOGLE_API_KEY"],
         temperature=0.2 
     )
 
-def get_vector_store_safe():
-    from pymilvus import MilvusClient
-    st.write("🔍 Diagnostic: Entering get_vector_store_safe...")
-    
-    # Use the official client directly
-    client = MilvusClient(
-        uri=st.secrets["ZILLIZ_URI"],
-        token=st.secrets["ZILLIZ_TOKEN"]
-    )
-    st.write("✅ Diagnostic: MilvusClient Connected.")
-    return client
-
-# --- PHASE 2: Execution (Direct Tool Use) ---
-accumulated_context = []
-
-try:
-    # 1. Get the raw client
-    client = get_vector_store_safe()
-    
-    # 2. Get embeddings model
-    embeddings_model = GoogleGenerativeAIEmbeddings(
+@st.cache_resource(show_spinner=False)
+def get_embeddings_model():
+    return GoogleGenerativeAIEmbeddings(
         model="gemini-embedding-001", 
         google_api_key=st.secrets["GOOGLE_API_KEY"]
     )
 
-    for topic in search_topics:
-        with st.spinner(f"🔍 Searching for: {topic}..."):
-            # 3. Generate the vector manually
-            query_vector = embeddings_model.embed_query(topic)
-            
-            # 4. Search directly using MilvusClient
-            results = client.search(
-                collection_name="RESUME_SEARCH",
-                data=[query_vector],
-                limit=5,
-                output_fields=["text"] # Make sure this matches your 'text' field name
-            )
-            
-            # 5. Extract text from the results
-            for hit in results[0]:
-                accumulated_context.append(hit['entity']['text'])
-                
-    st.success("✅ Search completed successfully.")
-
-except Exception as e:
-    st.error(f"Manual Search Error: {e}")
-    st.stop()
-    
-# --- 4. Initialization ---
-if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {"role": "assistant", "content": "I am Freddy's Assistant. I've analyzed his 20+ years of experience. How can I help you today?"}
-    ]
-
-# Only start the LLM at boot
-with st.status("🚀 Awakening Freddy's Career Advocate...", expanded=True) as status:
-    try:
-        st.write("📡 Connecting to Google AI...")
-        llm = get_llm()
-        status.update(label="✅ Systems Online", state="complete", expanded=False)
-    except Exception as e:
-        st.error(f"Initialization Error: {e}")
-        st.stop()
-
-# --- 5. THE CLEANER ---
+# --- 3. THE CLEANER ---
 def extract_clean_text(response):
     if hasattr(response, 'content'):
         content = response.content
@@ -99,12 +37,27 @@ def extract_clean_text(response):
         return " ".join([str(i) for i in content])
     return str(content)
 
-# --- 6. Display History ---
+# --- 4. Initialization ---
+if "messages" not in st.session_state:
+    st.session_state.messages = [
+        {"role": "assistant", "content": "I am Freddy's Assistant. I've analyzed his 20+ years of experience. How can I help you today?"}
+    ]
+
+with st.status("🚀 Awakening Freddy's Career Advocate...", expanded=False) as status:
+    try:
+        llm = get_llm()
+        embeddings_model = get_embeddings_model()
+        status.update(label="✅ Systems Online", state="complete")
+    except Exception as e:
+        st.error(f"Initialization Error: {e}")
+        st.stop()
+
+# --- 5. Display History ---
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# --- 7. The Agentic Logic ---
+# --- 6. The Agentic Logic ---
 if prompt := st.chat_input("Ask about Freddy's potential..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
@@ -119,22 +72,41 @@ if prompt := st.chat_input("Ask about Freddy's potential..."):
             clean_plan = extract_clean_text(plan_res)
             search_topics = [t.strip() for t in clean_plan.split("\n") if t.strip()][:3]
 
-        # PHASE 2: Execution (Tool Use)
+        # PHASE 2: Execution (Direct MilvusClient Search)
         accumulated_context = []
         
-        # --- NEW SAFE LOADING BLOCK ---
         try:
-            v_store = get_vector_store_safe()
-            retriever = v_store.as_retriever(search_kwargs={"k": 5})
-        except Exception as e:
-            st.error(f"Failed to mount database: {e}")
-            st.stop()
-        # ------------------------------
+            st.write("🔍 Diagnostic: Initializing Direct Search...")
+            # We open the client specifically for this search to avoid gRPC deadlocks
+            client = MilvusClient(
+                uri=st.secrets["ZILLIZ_URI"],
+                token=st.secrets["ZILLIZ_TOKEN"]
+            )
+            st.write("✅ Diagnostic: MilvusClient Connected.")
 
-        for topic in search_topics:
-            with st.spinner(f"🔍 Searching for: {topic}..."):
-                docs = retriever.invoke(topic)
-                accumulated_context.extend([d.page_content for d in docs])
+            for topic in search_topics:
+                with st.spinner(f"🔍 Searching for: {topic}..."):
+                    # Generate vector manually
+                    query_vector = embeddings_model.embed_query(topic)
+                    
+                    # Search using the lightweight client
+                    results = client.search(
+                        collection_name="RESUME_SEARCH",
+                        data=[query_vector],
+                        limit=5,
+                        output_fields=["text"] 
+                    )
+                    
+                    # Extract text chunks
+                    for hit in results[0]:
+                        accumulated_context.append(hit['entity']['text'])
+            
+            client.close() # Always close to free up the thread
+            st.write("✅ Diagnostic: Search Completed & Connection Closed.")
+
+        except Exception as e:
+            st.error(f"Manual Search Error: {e}")
+            st.stop()
 
         # PHASE 3: Synthesis & Advocacy
         context_str = "\n\n".join(list(set(accumulated_context)))
@@ -143,7 +115,9 @@ if prompt := st.chat_input("Ask about Freddy's potential..."):
                 ROLE: You are Freddy Goh's "Career Advocate." 
                 CONTEXT: {context_str}
                 USER QUESTION: {prompt}
-                TASK: Use context to provide a professional, persuasive response. Do not return "Career Advocate" or technical signatures.
+                TASK: Use the context to provide a professional, persuasive response. 
+                Focus on Freddy's 23+ years of experience and leadership.
+                Do not show any technical metadata or JSON.
         """
 
         with st.spinner("⚖️ Synthesizing recommendation..."):
