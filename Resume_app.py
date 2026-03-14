@@ -14,31 +14,45 @@ if "messages" not in st.session_state:
     ]
 
 # --- 3. Connections ---
-@st.cache_resource
-def init_connections():
-    try:
-        embeddings = GoogleGenerativeAIEmbeddings(
-            model="gemini-embedding-001", 
-            google_api_key=st.secrets["GOOGLE_API_KEY"]
+# 2. Optimized Connection Logic
+@st.cache_resource(show_spinner=False)
+def get_vector_store():
+    # Use the same parameters that just worked in your test script
+    if not connections.has_connection("default"):
+        connections.connect(
+            alias="default",
+            uri=st.secrets["ZILLIZ_URI"],
+            token=st.secrets["ZILLIZ_TOKEN"],
+            secure=True,
+            timeout=30
         )
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-3-flash-preview", 
-            google_api_key=st.secrets["GOOGLE_API_KEY"],
-            temperature=0.2 
-        )
-        v_store = Milvus(
-            embedding_function=embeddings,
-            connection_args={
-                "uri": st.secrets["ZILLIZ_URI"],
-                "token": st.secrets["ZILLIZ_TOKEN"],
-                "secure": True
-            },
-            collection_name="RESUME_SEARCH"
-        )
-        return v_store, llm
-    except Exception as e:
-        st.error(f"❌ Connection Failed: {e}")
-        st.stop()
+    
+    embeddings = GoogleGenerativeAIEmbeddings(
+        model="gemini-embedding-001", 
+        google_api_key=st.secrets["GOOGLE_API_KEY"]
+    )
+    
+    # Initialize Milvus with explicit search params to prevent hangs
+    return Milvus(
+        embedding_function=embeddings,
+        connection_args={"alias": "default"},
+        collection_name="RESUME_SEARCH",
+        search_params={"metric_type": "L2", "params": {"nprobe": 10}}
+    )
+
+@st.cache_resource(show_spinner=False)
+def get_llm():
+    return ChatGoogleGenerativeAI(
+        model="gemini-3-flash-preview", 
+        google_api_key=st.secrets["GOOGLE_API_KEY"],
+        temperature=0.2 
+    )
+
+# 3. Execution with UI Feedback
+with st.status("🚀 Awakening Freddy's Career Advocate...", expanded=False) as status:
+    v_store = get_vector_store()
+    llm = get_llm()
+    status.update(label="✅ Systems Online", state="complete")
 
 v_store, llm = init_connections()
 
