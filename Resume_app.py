@@ -86,7 +86,7 @@ if prompt := st.chat_input("Ask about Freddy's potential..."):
                 "Content-Type": "application/json"
             }
 
-            st.write("🔍 Diagnostic: Initializing REST Search via HTTPS...")
+  #          st.write("🔍 Diagnostic: Initializing REST Search via HTTPS...")
 
             for topic in search_topics:
                 with st.spinner(f"🔍 Searching for: {topic}..."):
@@ -111,7 +111,7 @@ if prompt := st.chat_input("Ask about Freddy's potential..."):
                     else:
                         st.error(f"Search Failed: {response.text}")
 
-            st.write("✅ Diagnostic: REST Search Completed.")
+ #           st.write("✅ Diagnostic: REST Search Completed.")
 
         except Exception as e:
             st.error(f"REST Search Error: {e}")
