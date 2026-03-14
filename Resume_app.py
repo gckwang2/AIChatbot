@@ -1,13 +1,14 @@
 import nest_asyncio
 nest_asyncio.apply()
 import streamlit as st
-from pymilvus import MilvusClient
+import requests
+import json
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 
 # --- 1. Page Config ---
 st.set_page_config(page_title="Freddy's skills finder powered by AI", layout="centered")
 st.title("🚀 Freddy's Skill Search powered by AI")
-st.caption("Agentic RAG | Zilliz Cloud | Gemini 3.0 Flash Preview")
+st.caption("Agentic RAG | Zilliz Cloud (REST) | Gemini 3.0 Flash Preview")
 
 # --- 2. Persistent Resources ---
 @st.cache_resource(show_spinner=False)
@@ -72,40 +73,48 @@ if prompt := st.chat_input("Ask about Freddy's potential..."):
             clean_plan = extract_clean_text(plan_res)
             search_topics = [t.strip() for t in clean_plan.split("\n") if t.strip()][:3]
 
-        # PHASE 2: Execution (Direct MilvusClient Search)
+        # PHASE 2: Execution (REST API Search)
         accumulated_context = []
         
         try:
-            st.write("🔍 Diagnostic: Initializing Direct Search...")
-            # We open the client specifically for this search to avoid gRPC deadlocks
-            client = MilvusClient(
-                uri=st.secrets["ZILLIZ_URI"],
-                token=st.secrets["ZILLIZ_TOKEN"]
-            )
-            st.write("✅ Diagnostic: MilvusClient Connected.")
+            # Prepare REST details
+            # Remove https:// and :443 from URI if they exist for clean formatting
+            base_uri = st.secrets["ZILLIZ_URI"].replace("https://", "").replace(":443", "")
+            search_url = f"https://{base_uri}/v1/vector/search"
+            headers = {
+                "Authorization": f"Bearer {st.secrets['ZILLIZ_TOKEN']}",
+                "Content-Type": "application/json"
+            }
+
+            st.write("🔍 Diagnostic: Initializing REST Search via HTTPS...")
 
             for topic in search_topics:
                 with st.spinner(f"🔍 Searching for: {topic}..."):
-                    # Generate vector manually
+                    # Generate vector
                     query_vector = embeddings_model.embed_query(topic)
                     
-                    # Search using the lightweight client
-                    results = client.search(
-                        collection_name="RESUME_SEARCH",
-                        data=[query_vector],
-                        limit=5,
-                        output_fields=["text"] 
-                    )
+                    # REST Payload
+                    payload = {
+                        "collectionName": "RESUME_SEARCH",
+                        "vector": query_vector,
+                        "limit": 5,
+                        "outputFields": ["text"]
+                    }
                     
-                    # Extract text chunks
-                    for hit in results[0]:
-                        accumulated_context.append(hit['entity']['text'])
-            
-            client.close() # Always close to free up the thread
-            st.write("✅ Diagnostic: Search Completed & Connection Closed.")
+                    # Execute HTTP POST
+                    response = requests.post(search_url, headers=headers, json=payload, timeout=15)
+                    
+                    if response.status_code == 200:
+                        results = response.json().get("data", [])
+                        for hit in results:
+                            accumulated_context.append(hit.get("text", ""))
+                    else:
+                        st.error(f"Search Failed: {response.text}")
+
+            st.write("✅ Diagnostic: REST Search Completed.")
 
         except Exception as e:
-            st.error(f"Manual Search Error: {e}")
+            st.error(f"REST Search Error: {e}")
             st.stop()
 
         # PHASE 3: Synthesis & Advocacy
