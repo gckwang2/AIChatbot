@@ -1,5 +1,6 @@
 import nest_asyncio
 nest_asyncio.apply()
+
 import streamlit as st
 import requests
 import os
@@ -8,25 +9,31 @@ from mlflow.genai import evaluate
 from mlflow.genai.scorers import Safety, RelevanceToQuery, Guidelines
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 
-# --- MLflow & Databricks Configuration ---
+# ==========================================
+# MLFLOW & DATABRICKS CONFIGURATION
+# ==========================================
 os.environ["DATABRICKS_HOST"] = "https://dbc-e8b3630a-3497.cloud.databricks.com"
 os.environ["DATABRICKS_TOKEN"] = st.secrets["DATABRICKS_TOKEN"]
 mlflow.set_tracking_uri("databricks")
 mlflow.set_experiment(experiment_id="23305632191551")
 mlflow.langchain.autolog()
 
-# --- 1. Page Config ---
+# ==========================================
+# PAGE CONFIGURATION
+# ==========================================
 st.set_page_config(page_title="Freddy's skills finder powered by AI", layout="centered")
 st.title("🚀 Freddy's Skill Search powered by AI")
 st.caption("Agentic RAG | Zilliz Cloud Vector Search | Gemini 3.0 Flash Preview")
 
-# --- 2. Persistent Resources ---
+# ==========================================
+# PERSISTENT RESOURCES
+# ==========================================
 @st.cache_resource(show_spinner=False)
 def get_llm():
     return ChatGoogleGenerativeAI(
         model="gemini-3-flash-preview", 
         google_api_key=st.secrets["GOOGLE_API_KEY"],
-        temperature=0  # Enforcing deterministic, grounded output
+        temperature=0  
     )
 
 @st.cache_resource(show_spinner=False)
@@ -36,8 +43,8 @@ def get_embeddings_model():
         google_api_key=st.secrets["GOOGLE_API_KEY"]
     )
 
-# --- 3. THE CLEANER ---
 def extract_clean_text(response):
+    """Helper to parse content reliably from LLM responses."""
     if hasattr(response, 'content'):
         content = response.content
     else:
@@ -48,9 +55,11 @@ def extract_clean_text(response):
         return " ".join([str(i) for i in content])
     return str(content)
 
-# --- 4. Core RAG Logic (Decoupled from UI) ---
+# ==========================================
+# CORE RAG LOGIC (DECOUPLED)
+# ==========================================
 def run_agentic_rag(query: str) -> str:
-    """Pure logic function for both UI and MLflow Evaluation."""
+    """Executes the planning, retrieval, and synthesis pipeline."""
     llm = get_llm()
     embeddings_model = get_embeddings_model()
     
@@ -60,7 +69,7 @@ def run_agentic_rag(query: str) -> str:
     clean_plan = extract_clean_text(plan_res)
     search_topics = [t.strip() for t in clean_plan.split("\n") if t.strip()][:3]
 
-    # PHASE 2: Search
+    # PHASE 2: REST Search execution
     accumulated_context = []
     base_uri = st.secrets["ZILLIZ_URI"].replace("https://", "").replace(":443", "")
     search_url = f"https://{base_uri}/v1/vector/search"
@@ -100,7 +109,9 @@ def run_agentic_rag(query: str) -> str:
     final_res = llm.invoke(final_agent_prompt)
     return extract_clean_text(final_res)
 
-# --- 5. Initialization ---
+# ==========================================
+# INITIALIZATION & PRE-WARMING
+# ==========================================
 if "messages" not in st.session_state:
     st.session_state.messages = [
         {"role": "assistant", "content": "I am Freddy's Assistant. I've analyzed his 23+ years of experience. How can I help you today?"}
@@ -108,7 +119,6 @@ if "messages" not in st.session_state:
 
 with st.status("🚀 Awakening Freddy's Career Advocate...", expanded=False) as status:
     try:
-        # Pre-warm resources
         get_llm()
         get_embeddings_model()
         status.update(label="✅ Systems Online", state="complete")
@@ -116,31 +126,38 @@ with st.status("🚀 Awakening Freddy's Career Advocate...", expanded=False) as 
         st.error(f"Initialization Error: {e}")
         st.stop()
 
-# --- 6. MLflow Evaluation Sidebar ---
+# ==========================================
+# MLFLOW EVALUATION SIDEBAR
+# ==========================================
 with st.sidebar:
     st.header("📊 Admin: MLflow Evaluation")
     st.write("Run GenAI Judges against the RAG pipeline.")
     
     if st.button("Run Evaluation Dataset"):
         with st.spinner("Running MLflow Evaluation..."):
-            # Step 1: Define evaluation dataset
+            
             eval_dataset = [{
                 "inputs": {"query": "What is Freddy's experience with AWS and Cloud Architecture?"}
             }]
 
-            # Step 2: Define predict_fn wrapper
             def predict(query):
                 return run_agentic_rag(query)
 
-            # Step 3: Run evaluation
+            # Route evaluation to the available Databricks AI Gateway endpoint
+            judge_model_uri = "endpoints:/databricks-meta-llama-3-3-70b-instruct"
+
             try:
                 results = evaluate(
                     data=eval_dataset,
                     predict_fn=predict,
                     scorers=[
-                        Safety(),
-                        RelevanceToQuery(),
-                        Guidelines(name="conciseness", guidelines="Responses must be concise."),
+                        Safety(model=judge_model_uri),
+                        RelevanceToQuery(model=judge_model_uri),
+                        Guidelines(
+                            model=judge_model_uri,
+                            name="conciseness", 
+                            guidelines="Responses must be concise."
+                        ),
                     ],
                 )
                 st.success("Evaluation Complete! Check Databricks UI.")
@@ -148,7 +165,9 @@ with st.sidebar:
             except Exception as e:
                 st.error(f"Evaluation failed: {e}")
 
-# --- 7. Main Chat UI ---
+# ==========================================
+# MAIN CHAT INTERFACE
+# ==========================================
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
@@ -159,11 +178,11 @@ if prompt := st.chat_input("Ask about Freddy's potential..."):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
+        # Wrap the live UI request in an MLflow Span
         with mlflow.start_span(name="Career_Advocate_Workflow") as span:
             span.set_inputs({"user_prompt": prompt})
             
             with st.spinner("⚖️ Synthesizing recommendation..."):
-                # Call the decoupled RAG logic
                 answer = run_agentic_rag(prompt)
                 
             span.set_outputs({"generated_answer": answer})
