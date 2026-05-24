@@ -22,7 +22,7 @@ mlflow.langchain.autolog()
 # ==========================================
 # PAGE CONFIGURATION
 # ==========================================
-st.set_page_config(page_title="Freddy's skills finder", layout="centered")
+st.set_page_config(page_title="Freddy's Skills Finder", layout="centered")
 st.title("🚀 Freddy's Skill Search")
 
 # ==========================================
@@ -52,12 +52,12 @@ def extract_clean_text(response):
         return " ".join([str(i) for i in content])
     return str(content)
 
-def run_agentic_rag(query: str, show_status=False) -> str:
+def run_agentic_rag(query: str) -> str:
+    """Core logic used by UI and MLflow Evaluation."""
     llm = get_llm()
     embeddings_model = get_embeddings_model()
     
     # 1. Planning
-    if show_status: st.spinner("🧠 Planning search...")
     planning_prompt = f"Identify 3 distinct technical search queries for: '{query}'. Output only, one per line."
     plan_res = llm.invoke(planning_prompt)
     search_topics = [t.strip() for t in extract_clean_text(plan_res).split("\n") if t.strip()][:3]
@@ -73,7 +73,6 @@ def run_agentic_rag(query: str, show_status=False) -> str:
             accumulated_context.extend([hit.get("text", "") for hit in response.json().get("data", [])])
 
     # 3. Synthesis
-    if show_status: st.spinner("⚖️ Synthesizing recommendation...")
     final_agent_prompt = f"ROLE: Career Advocate. CONTEXT: {'\n\n'.join(list(set(accumulated_context)))}. QUESTION: {query}."
     return extract_clean_text(llm.invoke(final_agent_prompt))
 
@@ -89,7 +88,7 @@ with st.sidebar:
                 with mlflow.start_run(run_name=f"eval_{timestamp}"):
                     evaluate(
                         data=[{"inputs": {"query": "What is Freddy's experience with AWS?"}}],
-                        predict_fn=lambda x: run_agentic_rag(x, show_status=False),
+                        predict_fn=run_agentic_rag,
                         scorers=[
                             Safety(model="endpoints:/databricks-meta-llama-3-3-70b-instruct"),
                             RelevanceToQuery(model="endpoints:/databricks-meta-llama-3-3-70b-instruct"),
@@ -116,13 +115,12 @@ if prompt := st.chat_input("Ask about Freddy's potential..."):
         with mlflow.start_span(name="Career_Advocate_Workflow") as span:
             span.set_inputs({"user_prompt": prompt})
             
-            # Using specific context managers for better UI feedback
-            with st.spinner("🔍 Agent is planning..."):
-                # (Logic here)
+            with st.spinner("🧠 Planning search..."):
+                # Logic implicitly handled by run_agentic_rag
                 pass
             
             with st.spinner("⚖️ Synthesizing recommendation..."):
-                answer = run_agentic_rag(prompt, show_status=False)
+                answer = run_agentic_rag(prompt)
                 
             span.set_outputs({"generated_answer": answer})
             st.markdown(answer)
