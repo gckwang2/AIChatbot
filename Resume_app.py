@@ -16,18 +16,14 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGener
 os.environ["DATABRICKS_HOST"] = "https://dbc-e8b3630a-3497.cloud.databricks.com"
 os.environ["DATABRICKS_TOKEN"] = st.secrets["DATABRICKS_TOKEN"]
 mlflow.set_tracking_uri("databricks")
-
-# Use a human-readable path instead of hardcoding IDs
-EXPERIMENT_PATH = "/Users/freddy.goh@example.com/Career_Advocate_Evaluation"
 mlflow.set_experiment(experiment_id="23305632191551")
 mlflow.langchain.autolog()
 
 # ==========================================
 # PAGE CONFIGURATION
 # ==========================================
-st.set_page_config(page_title="Freddy's skills finder powered by AI", layout="centered")
-st.title("🚀 Freddy's Skill Search powered by AI")
-st.caption("Agentic RAG | Zilliz Cloud Vector Search | Gemini 3.0 Flash Preview")
+st.set_page_config(page_title="Freddy's skills finder", layout="centered")
+st.title("🚀 Freddy's Skill Search")
 
 # ==========================================
 # CORE RESOURCES & LOGIC
@@ -48,10 +44,8 @@ def get_embeddings_model():
     )
 
 def extract_clean_text(response):
-    if hasattr(response, 'content'):
-        content = response.content
-    else:
-        content = response
+    if hasattr(response, 'content'): content = response.content
+    else: content = response
     if isinstance(content, list):
         if len(content) > 0 and isinstance(content[0], dict):
             return content[0].get('text', str(content[0]))
@@ -59,7 +53,6 @@ def extract_clean_text(response):
     return str(content)
 
 def run_agentic_rag(query: str) -> str:
-    """Core RAG logic used by both the Chat UI and MLflow Evaluator."""
     llm = get_llm()
     embeddings_model = get_embeddings_model()
     
@@ -95,22 +88,23 @@ with st.sidebar:
             run_name = f"{eval_version}_{timestamp}"
             
             try:
-                results = evaluate(
-                    data=[{"inputs": {"query": "What is Freddy's experience with AWS and Cloud Architecture?"}}],
-                    predict_fn=run_agentic_rag,
-                    run_name=run_name,
-                    scorers=[
-                        Safety(model="endpoints:/databricks-meta-llama-3-3-70b-instruct"),
-                        RelevanceToQuery(model="endpoints:/databricks-meta-llama-3-3-70b-instruct"),
-                        Guidelines(model="endpoints:/databricks-meta-llama-3-3-70b-instruct", name="conciseness", guidelines="Responses must be concise.")
-                    ]
-                )
+                # Use start_run to name the trace, keep evaluate() clean
+                with mlflow.start_run(run_name=run_name):
+                    evaluate(
+                        data=[{"inputs": {"query": "What is Freddy's experience with AWS?"}}],
+                        predict_fn=run_agentic_rag,
+                        scorers=[
+                            Safety(model="endpoints:/databricks-meta-llama-3-3-70b-instruct"),
+                            RelevanceToQuery(model="endpoints:/databricks-meta-llama-3-3-70b-instruct"),
+                            Guidelines(model="endpoints:/databricks-meta-llama-3-3-70b-instruct", name="conciseness", guidelines="Responses must be concise.")
+                        ]
+                    )
                 st.success(f"Evaluation Complete: {run_name}")
             except Exception as e:
                 st.error(f"Evaluation failed: {e}")
 
 # ==========================================
-# MAIN CHAT INTERFACE
+# MAIN CHAT
 # ==========================================
 if "messages" not in st.session_state:
     st.session_state.messages = [{"role": "assistant", "content": "Assistant ready."}]
