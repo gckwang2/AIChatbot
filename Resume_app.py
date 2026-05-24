@@ -19,7 +19,7 @@ mlflow.set_tracking_uri("databricks")
 
 # Use a human-readable path instead of hardcoding IDs
 EXPERIMENT_PATH = "/Users/freddy.goh@example.com/Career_Advocate_Evaluation"
-mlflow.set_experiment(EXPERIMENT_PATH)
+mlflow.set_experiment(experiment_id="23305632191551")
 mlflow.langchain.autolog()
 
 # ==========================================
