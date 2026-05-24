@@ -5,6 +5,7 @@ import streamlit as st
 import requests
 import os
 import mlflow
+import datetime
 from mlflow.genai import evaluate
 from mlflow.genai.scorers import Safety, RelevanceToQuery, Guidelines
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
@@ -15,7 +16,10 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGener
 os.environ["DATABRICKS_HOST"] = "https://dbc-e8b3630a-3497.cloud.databricks.com"
 os.environ["DATABRICKS_TOKEN"] = st.secrets["DATABRICKS_TOKEN"]
 mlflow.set_tracking_uri("databricks")
-mlflow.set_experiment(experiment_id="23305632191551")
+
+# Use a human-readable path instead of hardcoding IDs
+EXPERIMENT_PATH = "/Users/freddy.goh@example.com/Career_Advocate_Evaluation"
+mlflow.set_experiment(EXPERIMENT_PATH)
 mlflow.langchain.autolog()
 
 # ==========================================
@@ -26,7 +30,7 @@ st.title("🚀 Freddy's Skill Search powered by AI")
 st.caption("Agentic RAG | Zilliz Cloud Vector Search | Gemini 3.0 Flash Preview")
 
 # ==========================================
-# PERSISTENT RESOURCES
+# CORE RESOURCES & LOGIC
 # ==========================================
 @st.cache_resource(show_spinner=False)
 def get_llm():
@@ -44,7 +48,6 @@ def get_embeddings_model():
     )
 
 def extract_clean_text(response):
-    """Helper to parse content reliably from LLM responses."""
     if hasattr(response, 'content'):
         content = response.content
     else:
@@ -55,136 +58,73 @@ def extract_clean_text(response):
         return " ".join([str(i) for i in content])
     return str(content)
 
-# ==========================================
-# CORE RAG LOGIC (DECOUPLED)
-# ==========================================
 def run_agentic_rag(query: str) -> str:
-    """Executes the planning, retrieval, and synthesis pipeline."""
+    """Core RAG logic used by both the Chat UI and MLflow Evaluator."""
     llm = get_llm()
     embeddings_model = get_embeddings_model()
     
-    # PHASE 1: Plan
-    planning_prompt = f"Identify 3 distinct technical search queries to evaluate: '{query}'. Output queries only, one per line."
+    # Planning
+    planning_prompt = f"Identify 3 distinct technical search queries for: '{query}'. Output only, one per line."
     plan_res = llm.invoke(planning_prompt)
-    clean_plan = extract_clean_text(plan_res)
-    search_topics = [t.strip() for t in clean_plan.split("\n") if t.strip()][:3]
+    search_topics = [t.strip() for t in extract_clean_text(plan_res).split("\n") if t.strip()][:3]
 
-    # PHASE 2: REST Search execution
+    # Retrieval
     accumulated_context = []
     base_uri = st.secrets["ZILLIZ_URI"].replace("https://", "").replace(":443", "")
-    search_url = f"https://{base_uri}/v1/vector/search"
-    headers = {
-        "Authorization": f"Bearer {st.secrets['ZILLIZ_TOKEN']}",
-        "Content-Type": "application/json"
-    }
-
+    headers = {"Authorization": f"Bearer {st.secrets['ZILLIZ_TOKEN']}", "Content-Type": "application/json"}
     for topic in search_topics:
-        query_vector = embeddings_model.embed_query(topic)
-        payload = {
-            "collectionName": "RESUME_SEARCH",
-            "vector": query_vector,
-            "limit": 10,
-            "outputFields": ["text"]
-        }
-        
-        response = requests.post(search_url, headers=headers, json=payload, timeout=25)
+        payload = {"collectionName": "RESUME_SEARCH", "vector": embeddings_model.embed_query(topic), "limit": 10, "outputFields": ["text"]}
+        response = requests.post(f"https://{base_uri}/v1/vector/search", headers=headers, json=payload, timeout=25)
         if response.status_code == 200:
-            results = response.json().get("data", [])
-            for hit in results:
-                accumulated_context.append(hit.get("text", ""))
+            accumulated_context.extend([hit.get("text", "") for hit in response.json().get("data", [])])
 
-    # PHASE 3: Synthesis
-    context_str = "\n\n".join(list(set(accumulated_context)))
-    final_agent_prompt = f"""
-            ROLE: You are Freddy Goh's "Career Advocate." 
-            CONTEXT: {context_str}
-            USER QUESTION: {query}
-            TASK:
-    Use the context to provide a professional, persuasive response. 
-    Focus on metrics, seniority (23+ years), and leadership. 
-    If a skill isn't explicitly listed, infer the related skills found in the resume, and use his previous experience based on his senior level. Do not return "Career Advocate" in the return response.
-    Do not show any metadata, JSON, or technical signatures.
-    """
-    
-    final_res = llm.invoke(final_agent_prompt)
-    return extract_clean_text(final_res)
+    # Synthesis
+    final_agent_prompt = f"ROLE: Career Advocate. CONTEXT: {'\n\n'.join(list(set(accumulated_context)))}. QUESTION: {query}."
+    return extract_clean_text(llm.invoke(final_agent_prompt))
 
 # ==========================================
-# INITIALIZATION & PRE-WARMING
-# ==========================================
-if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {"role": "assistant", "content": "I am Freddy's Assistant. I've analyzed his 23+ years of experience. How can I help you today?"}
-    ]
-
-with st.status("🚀 Awakening Freddy's Career Advocate...", expanded=False) as status:
-    try:
-        get_llm()
-        get_embeddings_model()
-        status.update(label="✅ Systems Online", state="complete")
-    except Exception as e:
-        st.error(f"Initialization Error: {e}")
-        st.stop()
-
-# ==========================================
-# MLFLOW EVALUATION SIDEBAR
+# SIDEBAR EVALUATION
 # ==========================================
 with st.sidebar:
     st.header("📊 Admin: MLflow Evaluation")
-    st.write("Run GenAI Judges against the RAG pipeline.")
+    eval_version = st.text_input("Run Name/Version", value="v1_baseline")
     
-    if st.button("Run Evaluation Dataset"):
+    if st.button("Run Evaluation"):
         with st.spinner("Running MLflow Evaluation..."):
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            run_name = f"{eval_version}_{timestamp}"
             
-            eval_dataset = [{
-                "inputs": {"query": "What is Freddy's experience with AWS and Cloud Architecture?"}
-            }]
-
-            def predict(query):
-                return run_agentic_rag(query)
-
-            # Route evaluation to the available Databricks AI Gateway endpoint
-            judge_model_uri = "endpoints:/databricks-meta-llama-3-3-70b-instruct"
-
             try:
                 results = evaluate(
-                    data=eval_dataset,
-                    predict_fn=predict,
+                    data=[{"inputs": {"query": "What is Freddy's experience with AWS and Cloud Architecture?"}}],
+                    predict_fn=run_agentic_rag,
+                    run_name=run_name,
                     scorers=[
-                        Safety(model=judge_model_uri),
-                        RelevanceToQuery(model=judge_model_uri),
-                        Guidelines(
-                            model=judge_model_uri,
-                            name="conciseness", 
-                            guidelines="Responses must be concise."
-                        ),
-                    ],
+                        Safety(model="endpoints:/databricks-meta-llama-3-3-70b-instruct"),
+                        RelevanceToQuery(model="endpoints:/databricks-meta-llama-3-3-70b-instruct"),
+                        Guidelines(model="endpoints:/databricks-meta-llama-3-3-70b-instruct", name="conciseness", guidelines="Responses must be concise.")
+                    ]
                 )
-                st.success("Evaluation Complete! Check Databricks UI.")
-                st.write(f"Run ID: {results.run_id}")
+                st.success(f"Evaluation Complete: {run_name}")
             except Exception as e:
                 st.error(f"Evaluation failed: {e}")
 
 # ==========================================
 # MAIN CHAT INTERFACE
 # ==========================================
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+if "messages" not in st.session_state:
+    st.session_state.messages = [{"role": "assistant", "content": "Assistant ready."}]
+
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]): st.markdown(msg["content"])
 
 if prompt := st.chat_input("Ask about Freddy's potential..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
-
+    with st.chat_message("user"): st.markdown(prompt)
     with st.chat_message("assistant"):
-        # Wrap the live UI request in an MLflow Span
         with mlflow.start_span(name="Career_Advocate_Workflow") as span:
             span.set_inputs({"user_prompt": prompt})
-            
-            with st.spinner("⚖️ Synthesizing recommendation..."):
-                answer = run_agentic_rag(prompt)
-                
+            answer = run_agentic_rag(prompt)
             span.set_outputs({"generated_answer": answer})
             st.markdown(answer)
             st.session_state.messages.append({"role": "assistant", "content": answer})
