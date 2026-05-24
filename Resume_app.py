@@ -3,7 +3,22 @@ nest_asyncio.apply()
 import streamlit as st
 import requests
 import json
+import os
+import mlflow
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
+
+# --- MLflow & Databricks Configuration ---
+# Set environment variables so MLflow can automatically authenticate
+os.environ["DATABRICKS_HOST"] = "https://dbc-e8b3630a-3497.cloud.databricks.com"
+os.environ["DATABRICKS_TOKEN"] = st.secrets["DATABRICKS_TOKEN"]
+mlflow.set_tracking_uri("databricks")
+
+# Set a central experiment path in Databricks to store these traces
+# You can update this path to your specific Databricks user directory
+mlflow.set_experiment("/Shared/Freddy_Resume_App_Traces")
+
+# Optional: Autolog LangChain internal steps for deeper debugging
+mlflow.langchain.autolog()
 
 # --- 1. Page Config ---
 st.set_page_config(page_title="Freddy's skills finder powered by AI", layout="centered")
@@ -16,7 +31,7 @@ def get_llm():
     return ChatGoogleGenerativeAI(
         model="gemini-3-flash-preview", 
         google_api_key=st.secrets["GOOGLE_API_KEY"],
-        temperature=0.2 
+        temperature=0 
     )
 
 @st.cache_resource(show_spinner=False)
@@ -65,74 +80,81 @@ if prompt := st.chat_input("Ask about Freddy's potential..."):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        # PHASE 1: Agent Research Plan
-        planning_prompt = f"Identify 3 distinct technical search queries to evaluate: '{prompt}'. Output queries only, one per line."
         
-        with st.spinner("🧠 Agent is planning research..."):
-            plan_res = llm.invoke(planning_prompt)
-            clean_plan = extract_clean_text(plan_res)
-            search_topics = [t.strip() for t in clean_plan.split("\n") if t.strip()][:3]
+        # Start a custom MLflow Span to track the human-readable text
+        with mlflow.start_span(name="Career_Advocate_Workflow") as span:
+            # 1. Trace User Prompt
+            span.set_inputs({"user_prompt": prompt})
+            
+            # PHASE 1: Agent Research Plan
+            planning_prompt = f"Identify 3 distinct technical search queries to evaluate: '{prompt}'. Output queries only, one per line."
+            
+            with st.spinner("🧠 Agent is planning research..."):
+                plan_res = llm.invoke(planning_prompt)
+                clean_plan = extract_clean_text(plan_res)
+                search_topics = [t.strip() for t in clean_plan.split("\n") if t.strip()][:3]
 
-        # PHASE 2: Execution (REST API Search)
-        accumulated_context = []
-        
-        try:
-            # Prepare REST details
-            # Remove https:// and :443 from URI if they exist for clean formatting
-            base_uri = st.secrets["ZILLIZ_URI"].replace("https://", "").replace(":443", "")
-            search_url = f"https://{base_uri}/v1/vector/search"
-            headers = {
-                "Authorization": f"Bearer {st.secrets['ZILLIZ_TOKEN']}",
-                "Content-Type": "application/json"
-            }
+            # PHASE 2: Execution (REST API Search)
+            accumulated_context = []
+            
+            try:
+                base_uri = st.secrets["ZILLIZ_URI"].replace("https://", "").replace(":443", "")
+                search_url = f"https://{base_uri}/v1/vector/search"
+                headers = {
+                    "Authorization": f"Bearer {st.secrets['ZILLIZ_TOKEN']}",
+                    "Content-Type": "application/json"
+                }
 
-  #          st.write("🔍 Diagnostic: Initializing REST Search via HTTPS...")
+                for topic in search_topics:
+                    with st.spinner(f"Consulting Freddy's career history.."):
+                        query_vector = embeddings_model.embed_query(topic)
+                        
+                        payload = {
+                            "collectionName": "RESUME_SEARCH",
+                            "vector": query_vector,
+                            "limit": 10,
+                            "outputFields": ["text"]
+                        }
+                        
+                        response = requests.post(search_url, headers=headers, json=payload, timeout=25)
+                        
+                        if response.status_code == 200:
+                            results = response.json().get("data", [])
+                            for hit in results:
+                                accumulated_context.append(hit.get("text", ""))
+                        else:
+                            st.error(f"Search Failed: {response.text}")
 
-            for topic in search_topics:
-                with st.spinner(f"Consulting Freddy's career history.."):
-                    # Generate vector
-                    query_vector = embeddings_model.embed_query(topic)
-                    
-                    # REST Payload
-                    payload = {
-                        "collectionName": "RESUME_SEARCH",
-                        "vector": query_vector,
-                        "limit": 10,
-                        "outputFields": ["text"]
-                    }
-                    
-                    # Execute HTTP POST
-                    response = requests.post(search_url, headers=headers, json=payload, timeout=25)
-                    
-                    if response.status_code == 200:
-                        results = response.json().get("data", [])
-                        for hit in results:
-                            accumulated_context.append(hit.get("text", ""))
-                    else:
-                        st.error(f"Search Failed: {response.text}")
+            except Exception as e:
+                st.error(f"REST Search Error: {e}")
+                st.stop()
 
- #           st.write("✅ Diagnostic: REST Search Completed.")
+            # PHASE 3: Synthesis & Advocacy
+            context_str = "\n\n".join(list(set(accumulated_context)))
+            
+            # 2. Trace Retrieved Context
+            span.set_attribute("retrieved_zilliz_context", context_str)
+            
+            final_agent_prompt = f"""
+                    ROLE: You are Freddy Goh's "Career Advocate." 
+                    CONTEXT: {context_str}
+                    USER QUESTION: {prompt}
+                    TASK:
+            Use the context to provide a professional, persuasive response. 
+            Focus on metrics, seniority (23+ years), and leadership. 
+            If a skill isn't explicitly listed, infer the related skills found in the resume,and use his previous experience based on his senior level. Do not return "Career Advocate" in the return response.
+            Do not show any metadata, JSON, or technical signatures.
+            """
+            
+            # 3. Trace Final Prompt sent to LLM
+            span.set_attribute("final_llm_prompt", final_agent_prompt)
 
-        except Exception as e:
-            st.error(f"REST Search Error: {e}")
-            st.stop()
-
-        # PHASE 3: Synthesis & Advocacy
-        context_str = "\n\n".join(list(set(accumulated_context)))
-        
-        final_agent_prompt = f"""
-                ROLE: You are Freddy Goh's "Career Advocate." 
-                CONTEXT: {context_str}
-                USER QUESTION: {prompt}
-               TASK:
-        Use the context to provide a professional, persuasive response. 
-        Focus on metrics, seniority (23+ years), and leadership. 
-        If a skill isn't explicitly listed, infer the related skills found in the resume,and use his previous experience based on his senior level. Do not return "Career Advocate" in the return response.
-        Do not show any metadata, JSON, or technical signatures.
-        """
-
-        with st.spinner("⚖️ Synthesizing recommendation..."):
-            final_res = llm.invoke(final_agent_prompt)
-            answer = extract_clean_text(final_res)
-            st.markdown(answer)
-            st.session_state.messages.append({"role": "assistant", "content": answer})
+            with st.spinner("⚖️ Synthesizing recommendation..."):
+                final_res = llm.invoke(final_agent_prompt)
+                answer = extract_clean_text(final_res)
+                
+                # 4. Trace the Final Output
+                span.set_outputs({"generated_answer": answer})
+                
+                st.markdown(answer)
+                st.session_state.messages.append({"role": "assistant", "content": answer})
