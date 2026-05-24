@@ -52,16 +52,17 @@ def extract_clean_text(response):
         return " ".join([str(i) for i in content])
     return str(content)
 
-def run_agentic_rag(query: str) -> str:
+def run_agentic_rag(query: str, show_status=False) -> str:
     llm = get_llm()
     embeddings_model = get_embeddings_model()
     
-    # Planning
+    # 1. Planning
+    if show_status: st.spinner("🧠 Planning search...")
     planning_prompt = f"Identify 3 distinct technical search queries for: '{query}'. Output only, one per line."
     plan_res = llm.invoke(planning_prompt)
     search_topics = [t.strip() for t in extract_clean_text(plan_res).split("\n") if t.strip()][:3]
 
-    # Retrieval
+    # 2. Retrieval
     accumulated_context = []
     base_uri = st.secrets["ZILLIZ_URI"].replace("https://", "").replace(":443", "")
     headers = {"Authorization": f"Bearer {st.secrets['ZILLIZ_TOKEN']}", "Content-Type": "application/json"}
@@ -71,7 +72,8 @@ def run_agentic_rag(query: str) -> str:
         if response.status_code == 200:
             accumulated_context.extend([hit.get("text", "") for hit in response.json().get("data", [])])
 
-    # Synthesis
+    # 3. Synthesis
+    if show_status: st.spinner("⚖️ Synthesizing recommendation...")
     final_agent_prompt = f"ROLE: Career Advocate. CONTEXT: {'\n\n'.join(list(set(accumulated_context)))}. QUESTION: {query}."
     return extract_clean_text(llm.invoke(final_agent_prompt))
 
@@ -80,26 +82,21 @@ def run_agentic_rag(query: str) -> str:
 # ==========================================
 with st.sidebar:
     st.header("📊 Admin: MLflow Evaluation")
-    eval_version = st.text_input("Run Name/Version", value="v1_baseline")
-    
     if st.button("Run Evaluation"):
         with st.spinner("Running MLflow Evaluation..."):
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            run_name = f"{eval_version}_{timestamp}"
-            
             try:
-                # Use start_run to name the trace, keep evaluate() clean
-                with mlflow.start_run(run_name=run_name):
+                with mlflow.start_run(run_name=f"eval_{timestamp}"):
                     evaluate(
                         data=[{"inputs": {"query": "What is Freddy's experience with AWS?"}}],
-                        predict_fn=run_agentic_rag,
+                        predict_fn=lambda x: run_agentic_rag(x, show_status=False),
                         scorers=[
                             Safety(model="endpoints:/databricks-meta-llama-3-3-70b-instruct"),
                             RelevanceToQuery(model="endpoints:/databricks-meta-llama-3-3-70b-instruct"),
                             Guidelines(model="endpoints:/databricks-meta-llama-3-3-70b-instruct", name="conciseness", guidelines="Responses must be concise.")
                         ]
                     )
-                st.success(f"Evaluation Complete: {run_name}")
+                st.success("Evaluation Complete!")
             except Exception as e:
                 st.error(f"Evaluation failed: {e}")
 
@@ -118,7 +115,15 @@ if prompt := st.chat_input("Ask about Freddy's potential..."):
     with st.chat_message("assistant"):
         with mlflow.start_span(name="Career_Advocate_Workflow") as span:
             span.set_inputs({"user_prompt": prompt})
-            answer = run_agentic_rag(prompt)
+            
+            # Using specific context managers for better UI feedback
+            with st.spinner("🔍 Agent is planning..."):
+                # (Logic here)
+                pass
+            
+            with st.spinner("⚖️ Synthesizing recommendation..."):
+                answer = run_agentic_rag(prompt, show_status=False)
+                
             span.set_outputs({"generated_answer": answer})
             st.markdown(answer)
             st.session_state.messages.append({"role": "assistant", "content": answer})
