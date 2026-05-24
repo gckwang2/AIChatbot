@@ -23,7 +23,9 @@ mlflow.langchain.autolog()
 # PAGE CONFIGURATION
 # ==========================================
 st.set_page_config(page_title="Freddy's Skills Finder", layout="centered")
-st.title("🚀 Freddy's Skill Search")
+st.title("🚀 Freddy's Skill Search powered by AI")
+st.caption("Agentic RAG | Zilliz Cloud Vector Search | Gemini 3.0 Flash Preview")
+
 
 # ==========================================
 # CORE RESOURCES & LOGIC
