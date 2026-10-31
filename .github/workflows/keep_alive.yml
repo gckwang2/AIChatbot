@@ -1,34 +1,44 @@
-import asyncio
-from playwright.async_api import async_playwright
+name: Keep Streamlit Awake
 
-STREAMLIT_URL = "https://freddy-skills-queries-tools.streamlit.app/"
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
 
+jobs:
+  wake-up:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Playwright and ping Streamlit
+        run: |
+          npm init -y
+          npm install playwright
+          npx playwright install chromium --with-deps
+          node -e '
+          const { chromium } = require("playwright");
+          
+          const urls = [
+            "https://freddy-skills-queries-tools.streamlit.app/"
+          ];
 
-async def keep_awake():
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
-        try:
-            await page.goto(
-                STREAMLIT_URL, wait_until="networkidle", timeout=60000
-            )
-
-            # Look for the sleep screen wake-up button
-            wake_btn = page.locator("button:has-text('get this app back up')")
-            if await wake_btn.count() > 0:
-                print("App was sleeping. Clicking wake button...")
-                await wake_btn.click()
-                await page.wait_for_timeout(15000)  # Wait for container boot
-            else:
-                print("App is already awake. Holding WebSocket open...")
-                await page.wait_for_timeout(5000)
-
-        except Exception as e:
-            print(f"Error pinging Streamlit: {e}")
-        finally:
-            await browser.close()
-
-
-if __name__ == "__main__":
-    asyncio.run(keep_awake())
-
+          (async () => {
+            const browser = await chromium.launch();
+            for (const url of urls) {
+              console.log("Checking:", url);
+              const page = await browser.newPage();
+              await page.goto(url, { waitUntil: "networkidle", timeout: 60000 });
+              
+              const wakeButton = page.locator("button:has-text(\"get this app back up\")");
+              if (await wakeButton.count() > 0) {
+                console.log("Waking up:", url);
+                await wakeButton.click();
+                await page.waitForTimeout(15000);
+              } else {
+                console.log("Already awake:", url);
+                await page.waitForTimeout(5000);
+              }
+              await page.close();
+            }
+            await browser.close();
+          })();
+          '
