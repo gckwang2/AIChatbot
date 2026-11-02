@@ -1,0 +1,37 @@
+name: Ping Zilliz Cluster
+
+on:
+  schedule:
+    # Runs at 00:00 UTC every 4 days to safely prevent the 7-day auto-sleep
+    - cron: '0 0 */6 * *'
+  # Allows manual execution anytime via the GitHub Actions tab
+  workflow_dispatch:
+
+jobs:
+  ping-cluster:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Zilliz API
+        env:
+          ZILLIZ_ENDPOINT: ${{ secrets.ZILLIZ_ENDPOINT }}
+          ZILLIZ_API_KEY: ${{ secrets.ZILLIZ_API_KEY }}
+        run: |
+          # Strip trailing slash if present
+          CLEAN_ENDPOINT="${ZILLIZ_ENDPOINT%/}"
+
+          # Query the list collections endpoint to register activity
+          HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" \
+            -X POST "${CLEAN_ENDPOINT}/v2/vectordb/collections/list" \
+            -H "Authorization: Bearer ${ZILLIZ_API_KEY}" \
+            -H "Accept: application/json" \
+            -H "Content-Type: application/json" \
+            -d '{}')
+
+          echo "Response code: $HTTP_STATUS"
+          cat response.json
+
+          # Verify the API accepted the call (200 OK)
+          if [ "$HTTP_STATUS" -ne 200 ]; then
+            echo "Failed to ping Zilliz cluster."
+            exit 1
+          fi
