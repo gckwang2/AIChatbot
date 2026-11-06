@@ -9,7 +9,7 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGener
 
 # --- MLflow & Databricks Configuration ---
 # Set environment variables so MLflow can automatically authenticate
-os.environ["DATABRICKS_HOST"] = "https://dbc-e8b3630a-3497.cloud.databricks.com"
+os.environ["DATABRICKS_HOST"] = st.secrets["DATABRICKS_URL"]
 os.environ["DATABRICKS_TOKEN"] = st.secrets["DATABRICKS_TOKEN"]
 mlflow.set_tracking_uri("databricks")
 
